@@ -1,8 +1,21 @@
-# CLAUDE.md
+# CLAUDE.md - Next.js 15 + SQLite SaaS
 
 This project is a production-minded SaaS app built with Next.js 15 App Router,
 TypeScript, SQLite, and server-first React. Follow these rules unless a human
 explicitly changes the architecture.
+
+## Claude Operating Mode
+
+- Start every task by identifying which boundary is touched: route, server
+  action, query, migration, component, or test; reason: most SaaS bugs come from
+  mixing data, permission, and UI concerns.
+- Prefer small, reviewable changes with a matching test; reason: SaaS behavior
+  often affects billing, access, or customer data.
+- Before editing, inspect the nearest existing pattern and follow it unless it
+  conflicts with this file; reason: consistency is more valuable than a clever
+  one-off.
+- When requirements are ambiguous, choose the server-side, least-privilege
+  option and state the assumption; reason: auth and billing mistakes are costly.
 
 ## Stack And Versions
 
@@ -13,10 +26,14 @@ explicitly changes the architecture.
 - Use SQLite through `better-sqlite3` for local/single-node deployments or Turso
   for hosted/libSQL deployments; reason: both keep the SQL model explicit and
   avoid a heavy ORM for a small SaaS.
+- Use Drizzle only when the project already wants typed schema helpers; reason:
+  raw SQL plus tiny typed helpers is often enough, but Drizzle is a good fit
+  when migrations and generated types are already part of the workflow.
 - Use React Server Components by default; reason: secrets, database access, and
   authorization checks belong on the server.
-- Use Tailwind or CSS modules for styling, but keep business state out of CSS;
-  reason: UI styling should not hide data or permission logic.
+- Use Tailwind plus shadcn/ui, CSS modules, or the existing design system, but
+  keep business state out of CSS; reason: UI styling should not hide data or
+  permission logic.
 
 ## Project Structure
 
@@ -29,6 +46,7 @@ app/
 components/
   ui/                       Reusable presentational primitives.
   forms/                    Client form shells only when interactivity is needed.
+  tables/                   Dense SaaS data views.
 db/
   client.ts                 Database connection factory.
   schema.sql                Canonical schema for fresh installs.
@@ -39,6 +57,7 @@ lib/
   env.ts                    Runtime env validation.
   permissions.ts            Role and ownership checks.
   validators/               Zod schemas shared by forms and actions.
+  billing.ts                Provider event and entitlement helpers.
 tests/
   unit/                     Pure functions and validators.
   integration/              DB-backed actions and route handlers.
@@ -60,6 +79,8 @@ in `app/actions/` where App Router expects them.
 - `npm run db:migrate`: apply pending SQL migrations.
 - `npm run db:reset`: rebuild the local SQLite database from schema plus
   migrations.
+- If the project uses `pnpm` or `bun`, keep the same script names; reason:
+  Claude should not guess package-manager-specific command names inside tasks.
 
 Reason: every PR should prove type safety, lint cleanliness, and database
 compatibility without relying on a deployed environment.
@@ -96,6 +117,41 @@ compatibility without relying on a deployed environment.
 - Add an integration test for every migration that changes constraints or data
   shape; reason: SQLite accepts many shapes that only fail at runtime.
 
+Example migration shape:
+
+```sql
+-- db/migrations/0007_add_team_members.sql
+CREATE TABLE team_members (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(team_id, user_id)
+);
+
+CREATE INDEX idx_team_members_user_id ON team_members(user_id);
+```
+
+Reason: migrations should show constraints, ownership relationships, and query
+indexes in the same review.
+
+## Naming Conventions
+
+- Route segments use kebab-case, for example `app/(app)/team-settings/page.tsx`;
+  reason: URLs should be readable and stable.
+- Server actions use verb-first names, for example `createTeamAction` or
+  `updateBillingEmailAction`; reason: mutation intent should be obvious.
+- Query helpers use noun-first names, for example `teamById` or
+  `activeSubscriptionForTeam`; reason: read paths should describe the returned
+  data.
+- Zod schemas end with `Schema`, for example `createInviteSchema`; reason:
+  validators should be easy to find and reuse.
+- Test files mirror the unit under test, for example
+  `tests/integration/actions/create-team.test.ts`; reason: failed tests should
+  point to the owning code quickly.
+
 ## Data Access Patterns
 
 - Server components may call read-only query helpers directly.
@@ -105,6 +161,35 @@ compatibility without relying on a deployed environment.
 - Validate untrusted input with Zod before constructing SQL parameters.
 - Return small DTOs from query helpers instead of raw database rows; reason: UI
   components should not learn storage details.
+
+Example server action pattern:
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createInviteSchema } from "@/lib/validators/invites";
+import { requireTeamRole } from "@/lib/permissions";
+import { createInvite } from "@/db/queries/invites";
+
+export async function createInviteAction(input: unknown) {
+  const user = await requireTeamRole("admin");
+  const data = createInviteSchema.parse(input);
+
+  await createInvite({
+    teamId: user.teamId,
+    email: data.email,
+    role: data.role,
+    invitedByUserId: user.id,
+  });
+
+  revalidatePath("/team-settings/members");
+  return { ok: true };
+}
+```
+
+Reason: validation, authorization, mutation, and revalidation should be visible
+in one reviewable flow.
 
 ## App Router Patterns
 
@@ -140,6 +225,9 @@ compatibility without relying on a deployed environment.
 - For admin routes, check both authentication and role before loading privileged
   data.
 - For webhooks, verify signatures before parsing business payloads.
+- Prefer database-enforced uniqueness for memberships, slugs, billing customers,
+  and provider event IDs; reason: concurrency should not create duplicate tenant
+  state.
 
 ## Billing And Entitlements
 
@@ -149,6 +237,20 @@ compatibility without relying on a deployed environment.
   usage have different lifecycles.
 - Check entitlements in the server action or route handler that performs the
   paid action, not only in the UI.
+- Keep provider IDs out of client components unless they are explicitly public;
+  reason: billing identifiers are support data, not UI state.
+
+## Deployment Notes
+
+- Vercel is fine for Turso/libSQL deployments; reason: remote SQLite access works
+  well with serverless request lifecycles.
+- For `better-sqlite3`, prefer a single Node server or container with persistent
+  disk; reason: local SQLite files do not belong in stateless serverless
+  instances.
+- Run migrations as a release step before serving new code; reason: request
+  handlers should not race to change schema.
+- Add a health check that verifies app boot, env validation, and database
+  connectivity; reason: uptime checks should catch broken deploy configuration.
 
 ## Testing Expectations
 
@@ -159,8 +261,11 @@ compatibility without relying on a deployed environment.
 - E2E test the money path: signup, create team, use the primary feature, change
   plan, and cancel.
 - Add regression tests for every fixed bug before changing implementation.
+- For greenfield work, ask Claude to propose the first migration and one server
+  action before writing code; reason: this proves the project context is loaded
+  and the architecture is understood.
 
-## What We Do Not Do
+## Anti-Patterns
 
 - Do not put database calls in client components; reason: it leaks boundaries and
   cannot safely protect secrets.
@@ -174,6 +279,30 @@ compatibility without relying on a deployed environment.
   actions directly.
 - Do not add dependencies for one-line helpers; reason: SaaS apps already carry
   enough supply-chain surface.
+- Do not accept a webhook without idempotency storage; reason: payment providers
+  retry and can deliver events out of order.
+- Do not hide permission failures as empty states; reason: support and audit
+  workflows need clear access-denied behavior.
+
+## Greenfield Smoke Prompt
+
+After copying this file into a new project, run this prompt in Claude Code:
+
+```text
+Read CLAUDE.md and propose the first database migration, App Router structure,
+and server-action pattern for a tiny B2B todo SaaS. Do not write files yet.
+```
+
+Expected behavior:
+
+- Claude chooses Next.js 15 App Router, TypeScript, and SQLite without asking
+  for stack clarification.
+- Claude proposes tenant-scoped tables such as teams, users, memberships, and
+  todos.
+- Claude keeps reads in server components or query helpers.
+- Claude keeps writes in server actions with Zod validation and permission
+  checks.
+- Claude names at least one migration and test path.
 
 ## PR Checklist
 
