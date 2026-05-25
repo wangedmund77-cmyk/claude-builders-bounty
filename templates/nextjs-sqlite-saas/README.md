@@ -21,8 +21,10 @@ using Next.js 15 App Router, TypeScript, SQLite, and server-first React.
 ## What It Covers
 
 - Stack and version assumptions.
+- Default implementation choices for runtime, auth, database, ORM, validation,
+  payments, and tests.
 - Folder structure and naming conventions.
-- SQLite, Turso, and migration rules.
+- SQLite, Turso, database client contracts, env validation, and migration rules.
 - Data-access and server-action patterns.
 - Auth, tenancy, permissions, billing, and webhook rules.
 - Testing expectations and deployment notes.
@@ -32,10 +34,10 @@ using Next.js 15 App Router, TypeScript, SQLite, and server-first React.
 
 | Issue requirement | Covered in |
 | --- | --- |
-| Project structure | `Project Structure`, `Naming Conventions` |
-| DB migration rules | `SQLite And Migration Rules` |
+| Project structure | `Project Structure`, `Naming Conventions`, `Default Implementation Choices` |
+| DB migration rules | `SQLite And Migration Rules`, `Database Client Contracts` |
 | Dev commands | `Dev Commands` |
 | Patterns to follow | `Data Access Patterns`, `App Router Patterns`, `Component Patterns` |
 | Anti-patterns to avoid | `Anti-Patterns` |
 | Opinionated reasons | Every major rule includes a `reason:` clause |
-| Greenfield usability | `Greenfield Smoke Prompt`, `GREENFIELD_TEST_NOTES.md` |
+| Greenfield usability | `Greenfield Smoke Prompt`, copy-ready env/db snippets, `GREENFIELD_TEST_NOTES.md` |

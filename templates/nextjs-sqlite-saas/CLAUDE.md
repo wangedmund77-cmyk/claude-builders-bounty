@@ -35,6 +35,26 @@ explicitly changes the architecture.
   keep business state out of CSS; reason: UI styling should not hide data or
   permission logic.
 
+## Default Implementation Choices
+
+Use this table when starting a greenfield app. If the existing project already
+made a different choice, follow the project and document the mismatch in the PR.
+
+| Boundary | Default | Reason |
+| --- | --- | --- |
+| Runtime | Node.js 22 LTS | Native SQLite drivers and auth libraries are most predictable on the Node runtime. |
+| Package manager | Keep the detected lockfile; otherwise use `npm` | Mixing package managers causes noisy diffs and broken installs. |
+| Database | `better-sqlite3` locally, Turso/libSQL for hosted deployments | Local development stays fast while production has a managed SQLite option. |
+| ORM/query layer | Drizzle for schema and typed queries; raw SQL only for targeted migrations | Typed schema helps Claude preserve table names, relation shape, and parameterized queries. |
+| Auth | Auth.js/NextAuth v5 with server-side session helpers | It works with App Router and keeps session checks close to server actions. |
+| Validation | Zod at every server boundary | User input, webhook payloads, and env vars must fail before mutation. |
+| Payments | Stripe Checkout plus signed webhooks | SaaS money paths need provider-side pricing and idempotent event handling. |
+| Tests | Vitest for units/integration, Playwright for critical flows | This covers validators, DB-backed actions, and browser-level paid workflows. |
+
+Reason: Claude should not pause a greenfield task to ask which ordinary SaaS
+defaults to use. It should make these choices, then adapt only when the project
+already contains a stronger local convention.
+
 ## Project Structure
 
 ```text
@@ -97,6 +117,38 @@ compatibility without relying on a deployed environment.
 - Keep `.env.example` current whenever env requirements change; reason: new
   deployments should be reproducible.
 
+Example environment contract:
+
+```ts
+// lib/env.ts
+import { z } from "zod";
+
+const serverEnvSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+  AUTH_SECRET: z.string().min(32),
+  AUTH_URL: z.string().url().optional(),
+  STRIPE_SECRET_KEY: z.string().startsWith("sk_").optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),
+  TURSO_AUTH_TOKEN: z.string().optional(),
+});
+
+export const env = serverEnvSchema.parse(process.env);
+```
+
+```dotenv
+# .env.example
+DATABASE_URL=file:./data/dev.sqlite
+AUTH_SECRET=replace-with-32-plus-random-characters
+AUTH_URL=http://localhost:3000
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+TURSO_AUTH_TOKEN=
+```
+
+Reason: env validation belongs in one server-only module. Claude must update
+this contract before adding a feature that reads a new secret or deployment
+variable.
+
 ## SQLite And Migration Rules
 
 - Write migrations as numbered SQL files, for example
@@ -136,6 +188,59 @@ CREATE INDEX idx_team_members_user_id ON team_members(user_id);
 
 Reason: migrations should show constraints, ownership relationships, and query
 indexes in the same review.
+
+## Database Client Contracts
+
+Use one database client module and import it from server-only code. Do not open
+SQLite connections inside request handlers or client components.
+
+Local `better-sqlite3` shape:
+
+```ts
+// db/client.ts
+import "server-only";
+
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { env } from "@/lib/env";
+import * as schema from "./schema";
+
+const sqlite = new Database(env.DATABASE_URL.replace(/^file:/, ""));
+sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
+
+export const db = drizzle(sqlite, { schema });
+```
+
+Hosted Turso/libSQL shape:
+
+```ts
+// db/client.ts
+import "server-only";
+
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { env } from "@/lib/env";
+import * as schema from "./schema";
+
+const client = createClient({
+  url: env.DATABASE_URL,
+  authToken: env.TURSO_AUTH_TOKEN,
+});
+
+export const db = drizzle(client, { schema });
+```
+
+Rules:
+
+- Use one of these shapes, not both in the same runtime path; reason: accidental
+  dual clients create inconsistent connection behavior.
+- Keep `db/schema.ts` or `db/schema.sql` as the canonical source of tables;
+  reason: migrations and query helpers need one truth source.
+- Put seed scripts in `scripts/seed.ts` and make them idempotent; reason: Claude
+  should be able to reset a demo database without creating duplicate tenants.
+- Never run `db:push` against production; reason: production schema changes need
+  reviewed migrations.
 
 ## Naming Conventions
 

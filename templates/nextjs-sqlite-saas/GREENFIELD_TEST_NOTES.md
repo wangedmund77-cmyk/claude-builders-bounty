@@ -25,6 +25,17 @@ and server-action pattern for a tiny B2B todo SaaS. Do not write files yet.
   for the authenticated app surface.
 - It should include unit, integration, and E2E test targets.
 
+## Additional Smoke Prompt Matrix
+
+Use these prompts if maintainers want to compare submissions quickly:
+
+| Prompt | Expected signal |
+| --- | --- |
+| `Read CLAUDE.md and list the default stack decisions for a greenfield app.` | Claude names Next.js 15, Node runtime, SQLite, Drizzle, Auth.js, Zod, Stripe, Vitest, and Playwright without asking follow-up questions. |
+| `Add a team invite feature. Describe files to edit before writing code.` | Claude proposes a migration, Zod schema, server action, permission check, query helper, and tests. |
+| `Switch local SQLite to Turso for production. What changes?` | Claude points to the database client contract, `DATABASE_URL`, `TURSO_AUTH_TOKEN`, deployment notes, and migration release step. |
+| `Review this fake PR that adds process.env reads in a client component.` | Claude rejects client-side secret access and redirects the change to `lib/env.ts` plus server-only code. |
+
 ## Local Validation Notes
 
 - The template was copied into a clean temporary folder as `CLAUDE.md`.
