@@ -25,6 +25,8 @@ using Next.js 15 App Router, TypeScript, SQLite, and server-first React.
   payments, and tests.
 - Folder structure and naming conventions.
 - SQLite, Turso, database client contracts, env validation, and migration rules.
+- CI and release gates for lint, typecheck, tests, migrations, build, and
+  critical E2E flows.
 - Data-access and server-action patterns.
 - Auth, tenancy, permissions, billing, and webhook rules.
 - Testing expectations and deployment notes.
@@ -38,6 +40,7 @@ using Next.js 15 App Router, TypeScript, SQLite, and server-first React.
 | DB migration rules | `SQLite And Migration Rules`, `Database Client Contracts` |
 | Dev commands | `Dev Commands` |
 | Patterns to follow | `Data Access Patterns`, `App Router Patterns`, `Component Patterns` |
+| CI/release confidence | `CI And Release Gates`, `Testing Expectations` |
 | Anti-patterns to avoid | `Anti-Patterns` |
 | Opinionated reasons | Every major rule includes a `reason:` clause |
 | Greenfield usability | `Greenfield Smoke Prompt`, copy-ready env/db snippets, `GREENFIELD_TEST_NOTES.md` |

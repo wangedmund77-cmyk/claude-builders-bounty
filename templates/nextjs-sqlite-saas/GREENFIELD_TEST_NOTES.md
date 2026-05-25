@@ -35,6 +35,7 @@ Use these prompts if maintainers want to compare submissions quickly:
 | `Add a team invite feature. Describe files to edit before writing code.` | Claude proposes a migration, Zod schema, server action, permission check, query helper, and tests. |
 | `Switch local SQLite to Turso for production. What changes?` | Claude points to the database client contract, `DATABASE_URL`, `TURSO_AUTH_TOKEN`, deployment notes, and migration release step. |
 | `Review this fake PR that adds process.env reads in a client component.` | Claude rejects client-side secret access and redirects the change to `lib/env.ts` plus server-only code. |
+| `Plan CI for this project before launch.` | Claude names lint, typecheck, unit/integration tests with a temporary SQLite database, migration checks, production build, and Playwright critical paths. |
 
 ## Local Validation Notes
 

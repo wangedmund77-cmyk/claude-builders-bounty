@@ -105,6 +105,39 @@ in `app/actions/` where App Router expects them.
 Reason: every PR should prove type safety, lint cleanliness, and database
 compatibility without relying on a deployed environment.
 
+## CI And Release Gates
+
+Every pull request should pass the same gates locally and in CI:
+
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run db:migrate -- --dry-run
+npm run build
+```
+
+If the project does not support a dry-run migration command, run migrations
+against a temporary SQLite database in CI instead.
+
+Required CI jobs:
+
+- `lint-and-types`: run lint plus `tsc --noEmit`; reason: App Router errors
+  often surface as type or import-boundary failures before runtime.
+- `unit-and-integration`: run Vitest with a temporary SQLite database; reason:
+  server actions and query helpers need database-backed regression coverage.
+- `migration-check`: apply all migrations to an empty database and to the last
+  committed schema snapshot when available; reason: SaaS deploys cannot rely on
+  manual database repair.
+- `build`: run the production Next.js build; reason: server/client boundary and
+  route handler mistakes often fail only during build.
+- `e2e-critical-path`: run Playwright for signup, login, primary paid workflow,
+  and billing cancellation when those features exist; reason: money and access
+  flows deserve browser-level proof.
+
+Do not merge a schema, auth, billing, or permission change without a matching CI
+gate. If the test would be too expensive, document the skipped risk in the PR.
+
 ## Environment Rules
 
 - Read environment variables only from `lib/env.ts`; reason: validation,
