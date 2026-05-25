@@ -37,11 +37,16 @@ class DestructiveBashGuardTest(unittest.TestCase):
     def test_blocks_required_destructive_patterns_and_logs_attempts(self) -> None:
         payloads = [
             {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}},
+            {"tool_name": "Bash", "tool_input": {"command": "sudo rm -r -f build"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main --force"}},
             {"tool_name": "Bash", "tool_input": {"command": "git -C repo push --force"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DROP TABLE users'"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'TRUNCATE audit_log'"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions'"}},
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "psql -c 'DELETE FROM sessions; SELECT * FROM logs WHERE id=1'"},
+            },
         ]
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)

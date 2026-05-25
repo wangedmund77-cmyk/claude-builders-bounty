@@ -85,17 +85,22 @@ def has_recursive_force_rm(command: str) -> bool:
         if word != "rm":
             continue
         options = words[index + 1 :]
+        has_recursive = False
+        has_force = False
         for option in options:
             if option == "--":
-                return False
+                break
             if not option.startswith("-"):
                 continue
             if option in {"--recursive", "--force"}:
-                option_set = {item for item in options if item.startswith("-")}
-                return "--recursive" in option_set and "--force" in option_set
+                has_recursive = has_recursive or option == "--recursive"
+                has_force = has_force or option == "--force"
+                continue
             compact_flags = option.lstrip("-")
-            if "r" in compact_flags and "f" in compact_flags:
-                return True
+            has_recursive = has_recursive or "r" in compact_flags
+            has_force = has_force or "f" in compact_flags
+        if has_recursive and has_force:
+            return True
     return False
 
 
@@ -114,10 +119,10 @@ def has_force_push(command: str) -> bool:
 
 
 def has_delete_without_where(command: str) -> bool:
-    if not DELETE_FROM_RE.search(command):
-        return False
-    after_delete = DELETE_FROM_RE.split(command, maxsplit=1)[-1]
-    return WHERE_RE.search(after_delete) is None
+    for statement in re.split(r";|\n", command):
+        if DELETE_FROM_RE.search(statement) and WHERE_RE.search(statement) is None:
+            return True
+    return False
 
 
 def blocked_reason(command: str) -> str | None:
