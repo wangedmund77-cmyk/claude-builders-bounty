@@ -25,6 +25,7 @@ using Next.js 15 App Router, TypeScript, SQLite, and server-first React.
   payments, and tests.
 - Folder structure and naming conventions.
 - SQLite, Turso, database client contracts, env validation, and migration rules.
+- Tenant-safe ID, timestamp, and soft-delete conventions for SaaS auditability.
 - CI and release gates for lint, typecheck, tests, migrations, build, and
   critical E2E flows.
 - Data-access and server-action patterns.

@@ -192,6 +192,15 @@ variable.
 - Every table must include a stable text primary key or integer primary key,
   `created_at`, and `updated_at` where updates are possible; reason: SaaS audit
   and support workflows depend on timestamps.
+- Prefer non-sequential text IDs such as cuid2 or UUIDv7 for tenant-visible
+  records; reason: public URLs, invoices, invites, and support links should not
+  leak customer counts or make enumeration easy.
+- Choose one timestamp encoding per project, preferably ISO text for
+  human-readable audit rows or integer milliseconds for high-volume sortable
+  rows, and do not mix encodings in the same database; reason: SQLite will not
+  protect the team from inconsistent date comparisons.
+- Use `deleted_at` soft deletes for user-facing or billing-adjacent records;
+  reason: support, audit, and recovery workflows often need the original row.
 - Use foreign keys and enable `PRAGMA foreign_keys = ON` when opening SQLite
   connections; reason: relational integrity should not depend on application
   discipline.
@@ -213,10 +222,14 @@ CREATE TABLE team_members (
   role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TEXT,
   UNIQUE(team_id, user_id)
 );
 
 CREATE INDEX idx_team_members_user_id ON team_members(user_id);
+CREATE INDEX idx_team_members_active_team_id
+  ON team_members(team_id)
+  WHERE deleted_at IS NULL;
 ```
 
 Reason: migrations should show constraints, ownership relationships, and query
