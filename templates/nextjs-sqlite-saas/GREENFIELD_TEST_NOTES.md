@@ -56,3 +56,17 @@ The template directly answers the issue acceptance criteria:
 - Patterns and anti-patterns include reasons.
 - A greenfield smoke prompt is included for maintainers who want to test the
   file in a new app.
+
+## Static Acceptance Check
+
+Run:
+
+```bash
+python3 templates/nextjs-sqlite-saas/validate_template.py
+```
+
+Expected result:
+
+```text
+Template acceptance check passed.
+```
