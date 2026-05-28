@@ -19,6 +19,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `DROP TABLE`
 - `TRUNCATE`
 - `DELETE FROM ...` without a `WHERE` clause
+- high-risk system operations: `mkfs`, raw `dd ... of=/dev/...` writes, and
+  recursive `chmod 777 /`
 
 Blocked attempts are appended to `~/.claude/hooks/blocked.log` as JSON lines with:
 

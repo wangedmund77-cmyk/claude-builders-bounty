@@ -23,6 +23,8 @@ DROP_TABLE_RE = re.compile(r"\bdrop\s+table\b", re.IGNORECASE)
 TRUNCATE_RE = re.compile(r"\btruncate\b", re.IGNORECASE)
 DELETE_FROM_RE = re.compile(r"\bdelete\s+from\b", re.IGNORECASE)
 WHERE_RE = re.compile(r"\bwhere\b", re.IGNORECASE)
+MKFS_RE = re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)
+DD_DEVICE_WRITE_RE = re.compile(r"\bdd\b(?=.*\bof=/dev/)", re.IGNORECASE)
 
 
 def claude_dir(home: Path | None = None) -> Path:
@@ -49,7 +51,7 @@ def load_payload(stdin_text: str) -> dict[str, Any]:
 
 def command_from_payload(payload: dict[str, Any]) -> str | None:
     tool_name = payload.get("tool_name") or payload.get("tool")
-    if tool_name != "Bash":
+    if tool_name is not None and tool_name != "Bash":
         return None
 
     tool_input = payload.get("tool_input") or payload.get("input") or {}
@@ -96,7 +98,7 @@ def has_recursive_force_rm(command: str) -> bool:
                 has_recursive = has_recursive or option == "--recursive"
                 has_force = has_force or option == "--force"
                 continue
-            compact_flags = option.lstrip("-")
+            compact_flags = option.lstrip("-").lower()
             has_recursive = has_recursive or "r" in compact_flags
             has_force = has_force or "f" in compact_flags
         if has_recursive and has_force:
@@ -114,7 +116,24 @@ def has_force_push(command: str) -> bool:
         except ValueError:
             continue
         flags = words[push_index + 1 :]
-        return any(flag in {"--force", "--force-with-lease", "-f"} for flag in flags)
+        return any(
+            flag == "-f" or flag.startswith("--force") or flag.startswith("--force-with-lease")
+            for flag in flags
+        )
+    return False
+
+
+def has_recursive_chmod_root(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if word != "chmod":
+            continue
+        args = words[index + 1 :]
+        has_recursive = any(arg == "-R" or (arg.startswith("-") and "r" in arg.lower()) for arg in args)
+        has_mode = "777" in args
+        targets_root = "/" in args
+        if has_recursive and has_mode and targets_root:
+            return True
     return False
 
 
@@ -132,6 +151,9 @@ def blocked_reason(command: str) -> str | None:
         (lambda value: DROP_TABLE_RE.search(value) is not None, "DROP TABLE is blocked"),
         (lambda value: TRUNCATE_RE.search(value) is not None, "TRUNCATE is blocked"),
         (has_delete_without_where, "DELETE FROM without WHERE is blocked"),
+        (lambda value: MKFS_RE.search(value) is not None, "filesystem formatting is blocked"),
+        (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
+        (has_recursive_chmod_root, "recursive chmod 777 on root is blocked"),
     )
     for check, reason in checks:
         if check(command):

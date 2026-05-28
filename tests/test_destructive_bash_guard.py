@@ -38,7 +38,9 @@ class DestructiveBashGuardTest(unittest.TestCase):
         payloads = [
             {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}},
             {"tool_name": "Bash", "tool_input": {"command": "sudo rm -r -f build"}},
+            {"tool_name": "Bash", "tool_input": {"command": "rm -Rf build"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main --force"}},
+            {"tool_name": "Bash", "tool_input": {"command": "git push origin main --force-with-lease=main"}},
             {"tool_name": "Bash", "tool_input": {"command": "git -C repo push --force"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DROP TABLE users'"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'TRUNCATE audit_log'"}},
@@ -47,6 +49,9 @@ class DestructiveBashGuardTest(unittest.TestCase):
                 "tool_name": "Bash",
                 "tool_input": {"command": "psql -c 'DELETE FROM sessions; SELECT * FROM logs WHERE id=1'"},
             },
+            {"tool_name": "Bash", "tool_input": {"command": "mkfs.ext4 /dev/sdb1"}},
+            {"tool_name": "Bash", "tool_input": {"command": "dd if=image.iso of=/dev/sdb bs=4M"}},
+            {"tool_name": "Bash", "tool_input": {"command": "chmod -R 777 /"}},
         ]
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -70,6 +75,7 @@ class DestructiveBashGuardTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "rm -r build"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions WHERE id=1'"}},
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "echo ok"}},
             {"tool_name": "Read", "tool_input": {"file_path": "README.md"}},
         ]
         with tempfile.TemporaryDirectory() as tmp:
