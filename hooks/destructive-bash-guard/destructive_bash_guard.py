@@ -23,6 +23,8 @@ DROP_TABLE_RE = re.compile(r"\bdrop\s+table\b", re.IGNORECASE)
 TRUNCATE_RE = re.compile(r"\btruncate\b", re.IGNORECASE)
 DELETE_FROM_RE = re.compile(r"\bdelete\s+from\b", re.IGNORECASE)
 WHERE_RE = re.compile(r"\bwhere\b", re.IGNORECASE)
+SQL_LINE_COMMENT_RE = re.compile(r"--[^\r\n]*")
+SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 MKFS_RE = re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)
 DD_DEVICE_WRITE_RE = re.compile(r"\bdd\b(?=.*\bof=/dev/)", re.IGNORECASE)
 
@@ -137,8 +139,13 @@ def has_recursive_chmod_root(command: str) -> bool:
     return False
 
 
+def strip_sql_comments(command: str) -> str:
+    command = SQL_BLOCK_COMMENT_RE.sub("", command)
+    return SQL_LINE_COMMENT_RE.sub("", command)
+
+
 def has_delete_without_where(command: str) -> bool:
-    for statement in re.split(r";|\n", command):
+    for statement in re.split(r";|\n", strip_sql_comments(command)):
         if DELETE_FROM_RE.search(statement) and WHERE_RE.search(statement) is None:
             return True
     return False

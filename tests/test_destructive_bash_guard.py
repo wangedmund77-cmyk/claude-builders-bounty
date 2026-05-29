@@ -45,6 +45,8 @@ class DestructiveBashGuardTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DROP TABLE users'"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'TRUNCATE audit_log'"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions'"}},
+            {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions -- WHERE id=1'"}},
+            {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions /* WHERE id=1 */'"}},
             {
                 "tool_name": "Bash",
                 "tool_input": {"command": "psql -c 'DELETE FROM sessions; SELECT * FROM logs WHERE id=1'"},
