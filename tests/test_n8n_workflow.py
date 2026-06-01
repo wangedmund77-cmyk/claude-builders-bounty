@@ -1,9 +1,13 @@
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 
-WORKFLOW = Path(__file__).resolve().parents[1] / "workflows" / "n8n-weekly-dev-summary.json"
+ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW = ROOT / "workflows" / "n8n-weekly-dev-summary.json"
+VALIDATOR = ROOT / "scripts" / "validate_n8n_workflow.py"
 
 
 class N8nWorkflowTests(unittest.TestCase):
@@ -27,6 +31,16 @@ class N8nWorkflowTests(unittest.TestCase):
         self.assertIn("SUMMARY_EMAIL_TO", raw)
         self.assertIn("SUMMARY_LANGUAGE", raw)
         self.assertIn("claude-sonnet-4-20250514", raw)
+
+    def test_workflow_validator_passes_static_checks(self):
+        result = subprocess.run(
+            [sys.executable, str(VALIDATOR)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("workflow OK", result.stdout)
 
 
 if __name__ == "__main__":
