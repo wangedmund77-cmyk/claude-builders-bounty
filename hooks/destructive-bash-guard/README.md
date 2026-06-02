@@ -32,7 +32,8 @@ Blocked attempts are appended to `~/.claude/hooks/blocked.log` as JSON lines wit
 ## Manual Check
 
 ```bash
-printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/demo"}}' | ~/.claude/hooks/destructive-bash-guard.py
+python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructive-bash-guard/samples/safe-input.json
+python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructive-bash-guard/samples/dangerous-input.json
 ```
 
-Expected result: exit code `2`, a clear block message on stderr, and a new entry in `~/.claude/hooks/blocked.log`.
+Expected result: the safe sample exits `0` without writing a block log entry; the dangerous sample exits `2`, prints a clear block message on stderr, and appends a new JSON line to `~/.claude/hooks/blocked.log`.
