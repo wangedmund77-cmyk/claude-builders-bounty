@@ -34,6 +34,27 @@ You're in the right place.
 
 ---
 
+## Destructive Bash Guard Hook
+
+This PR includes a Claude Code `PreToolUse` hook for bounty [#3](../../issues/3).
+
+Install it from the repository root:
+
+```bash
+python3 hooks/destructive-bash-guard/destructive_bash_guard.py --install
+```
+
+Run the bundled smoke samples:
+
+```bash
+python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructive-bash-guard/samples/safe-input.json
+python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructive-bash-guard/samples/dangerous-input.json
+```
+
+The safe sample exits cleanly; the dangerous sample exits `2`, explains the block, and writes to `~/.claude/hooks/blocked.log`.
+
+---
+
 ## Rules
 
 - Tasks must be related to Claude Code or AI tooling
