@@ -18,6 +18,8 @@ from typing import Any
 
 HOOK_NAME = "destructive-bash-guard.py"
 BLOCK_LOG = "blocked.log"
+LOG_DIR_MODE = 0o700
+LOG_FILE_MODE = 0o600
 
 DROP_TABLE_RE = re.compile(r"\bdrop\s+table\b", re.IGNORECASE)
 TRUNCATE_RE = re.compile(r"\btruncate\b", re.IGNORECASE)
@@ -170,14 +172,25 @@ def blocked_reason(command: str) -> str | None:
 
 def write_block_log(command: str, project_path: str, reason: str, home: Path | None = None) -> None:
     path = log_path(home)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, mode=LOG_DIR_MODE, exist_ok=True)
+    path.parent.chmod(LOG_DIR_MODE)
+    if path.is_symlink():
+        raise OSError(f"refusing to write block log through symlink: {path}")
+
     entry = {
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
         "command": command,
         "project_path": project_path,
         "reason": reason,
     }
-    with path.open("a", encoding="utf-8") as handle:
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, LOG_FILE_MODE)
+    with os.fdopen(fd, "a", encoding="utf-8") as handle:
+        if hasattr(os, "fchmod"):
+            os.fchmod(handle.fileno(), LOG_FILE_MODE)
         handle.write(json.dumps(entry, sort_keys=True) + "\n")
 
 
@@ -192,10 +205,14 @@ def run_hook(stdin_text: str) -> int:
         return 0
 
     project_path = project_path_from_payload(payload)
-    write_block_log(command, project_path, reason)
+    log_warning = ""
+    try:
+        write_block_log(command, project_path, reason)
+    except OSError as exc:
+        log_warning = f" Block log was not written: {exc}."
     print(
         f"Blocked destructive Bash command: {reason}. "
-        f"Review the command before running it manually: {command}",
+        f"Review the command before running it manually: {command}.{log_warning}",
         file=sys.stderr,
     )
     return 2

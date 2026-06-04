@@ -52,6 +52,7 @@ python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructi
 ```
 
 The safe sample exits cleanly; the dangerous sample exits `2`, explains the block, and writes to `~/.claude/hooks/blocked.log`.
+The audit log path is kept user-only and symlinked log paths are refused.
 
 ---
 

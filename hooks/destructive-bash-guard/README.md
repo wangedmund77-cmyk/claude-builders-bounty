@@ -29,6 +29,10 @@ Blocked attempts are appended to `~/.claude/hooks/blocked.log` as JSON lines wit
 - project path
 - reason
 
+The hook creates `~/.claude/hooks` with user-only permissions, writes
+`blocked.log` as user-read/write only, and refuses to write the audit log through
+a symlinked log path.
+
 ## Manual Check
 
 ```bash

@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import stat
 import sys
 import tempfile
 import unittest
@@ -66,11 +67,31 @@ class DestructiveBashGuardTest(unittest.TestCase):
                 json.loads(line)
                 for line in (home / ".claude" / "hooks" / "blocked.log").read_text().splitlines()
             ]
+            hooks_mode = stat.S_IMODE((home / ".claude" / "hooks").stat().st_mode)
+            log_mode = stat.S_IMODE((home / ".claude" / "hooks" / "blocked.log").stat().st_mode)
 
         self.assertEqual(len(log_entries), len(payloads))
         self.assertEqual(log_entries[0]["command"], "rm -rf build")
         self.assertEqual(log_entries[0]["project_path"], "/tmp/project")
         self.assertIn("timestamp", log_entries[0])
+        self.assertEqual(hooks_mode, 0o700)
+        self.assertEqual(log_mode, 0o600)
+
+    def test_refuses_symlinked_block_log_but_still_blocks_command(self) -> None:
+        payload = {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            hooks_dir = home / ".claude" / "hooks"
+            hooks_dir.mkdir(parents=True)
+            target = home / "redirected.log"
+            (hooks_dir / "blocked.log").symlink_to(target)
+
+            result = self.run_hook(payload, home)
+
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("Blocked destructive Bash command", result.stderr)
+            self.assertIn("Block log was not written", result.stderr)
+            self.assertFalse(target.exists())
 
     def test_allows_normal_commands_and_delete_with_where_clause(self) -> None:
         payloads = [
