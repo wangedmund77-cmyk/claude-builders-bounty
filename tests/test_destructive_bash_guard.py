@@ -40,6 +40,8 @@ class DestructiveBashGuardTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}},
             {"tool_name": "Bash", "tool_input": {"command": "sudo rm -r -f build"}},
             {"tool_name": "Bash", "tool_input": {"command": "rm -Rf build"}},
+            {"tool_name": "Bash", "tool_input": {"command": "bash -c 'rm -rf build'"}},
+            {"tool_name": "Bash", "tool_input": {"command": "sh -lc 'git push origin main --force'"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main --force"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main --force-with-lease=main"}},
             {"tool_name": "Bash", "tool_input": {"command": "git -C repo push --force"}},
@@ -98,6 +100,7 @@ class DestructiveBashGuardTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "rm -r build"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions WHERE id=1'"}},
+            {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions\nWHERE id=1'"}},
             {"hook_event_name": "PreToolUse", "tool_input": {"command": "echo ok"}},
             {"tool_name": "Read", "tool_input": {"file_path": "README.md"}},
         ]

@@ -22,6 +22,9 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - high-risk system operations: `mkfs`, raw `dd ... of=/dev/...` writes, and
   recursive `chmod 777 /`
 
+The same checks are applied to commands wrapped by shell execution helpers such
+as `bash -c 'rm -rf build'` or `sh -lc 'git push --force'`.
+
 Blocked attempts are appended to `~/.claude/hooks/blocked.log` as JSON lines with:
 
 - timestamp

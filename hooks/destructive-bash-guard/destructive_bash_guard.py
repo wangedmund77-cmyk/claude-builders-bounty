@@ -29,6 +29,11 @@ SQL_LINE_COMMENT_RE = re.compile(r"--[^\r\n]*")
 SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 MKFS_RE = re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)
 DD_DEVICE_WRITE_RE = re.compile(r"\bdd\b(?=.*\bof=/dev/)", re.IGNORECASE)
+SQL_STATEMENT_START_RE = re.compile(
+    r"\b(select|insert|update|delete|drop|truncate|create|alter|merge)\b",
+    re.IGNORECASE,
+)
+SHELL_EXECUTABLES = {"bash", "dash", "fish", "ksh", "sh", "zsh"}
 
 
 def claude_dir(home: Path | None = None) -> Path:
@@ -146,14 +151,51 @@ def strip_sql_comments(command: str) -> str:
     return SQL_LINE_COMMENT_RE.sub("", command)
 
 
+def delete_statement_has_where(statement: str, match: re.Match[str]) -> bool:
+    remainder = statement[match.end() :]
+    where_match = WHERE_RE.search(remainder)
+    if where_match is None:
+        return False
+    before_where = remainder[: where_match.start()]
+    return SQL_STATEMENT_START_RE.search(before_where) is None
+
+
 def has_delete_without_where(command: str) -> bool:
-    for statement in re.split(r";|\n", strip_sql_comments(command)):
-        if DELETE_FROM_RE.search(statement) and WHERE_RE.search(statement) is None:
-            return True
+    for statement in strip_sql_comments(command).split(";"):
+        for match in DELETE_FROM_RE.finditer(statement):
+            if not delete_statement_has_where(statement, match):
+                return True
     return False
 
 
-def blocked_reason(command: str) -> str | None:
+def nested_shell_commands(command: str) -> list[str]:
+    words = shell_words(command)
+    nested: list[str] = []
+    for index, word in enumerate(words):
+        if Path(word).name not in SHELL_EXECUTABLES:
+            continue
+        args = words[index + 1 :]
+        for arg_index, arg in enumerate(args):
+            if arg == "-c" and arg_index + 1 < len(args):
+                nested.append(args[arg_index + 1])
+                break
+            if arg.startswith("-") and "c" in arg[1:] and arg_index + 1 < len(args):
+                nested.append(args[arg_index + 1])
+                break
+    return nested
+
+
+def nested_shell_blocked_reason(command: str, depth: int) -> str | None:
+    if depth >= 2:
+        return None
+    for nested_command in nested_shell_commands(command):
+        reason = blocked_reason(nested_command, depth + 1)
+        if reason is not None:
+            return f"nested shell command: {reason}"
+    return None
+
+
+def blocked_reason(command: str, depth: int = 0) -> str | None:
     checks = (
         (has_recursive_force_rm, "recursive force removal is blocked"),
         (has_force_push, "force-pushing is blocked"),
@@ -167,7 +209,7 @@ def blocked_reason(command: str) -> str | None:
     for check, reason in checks:
         if check(command):
             return reason
-    return None
+    return nested_shell_blocked_reason(command, depth)
 
 
 def write_block_log(command: str, project_path: str, reason: str, home: Path | None = None) -> None:
