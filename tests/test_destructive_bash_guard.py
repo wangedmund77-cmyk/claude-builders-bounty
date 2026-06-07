@@ -57,6 +57,9 @@ class DestructiveBashGuardTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "mkfs.ext4 /dev/sdb1"}},
             {"tool_name": "Bash", "tool_input": {"command": "dd if=image.iso of=/dev/sdb bs=4M"}},
             {"tool_name": "Bash", "tool_input": {"command": "chmod -R 777 /"}},
+            {"tool_name": "Bash", "tool_input": {"command": ":(){ :|:& };:"}},
+            {"tool_name": "Bash", "tool_input": {"command": "bash -c 'bomb(){ bomb | bomb & }; bomb'"}},
+            {"tool_name": "Bash", "tool_input": {"command": "function boom { boom|boom& }; boom"}},
         ]
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -101,6 +104,7 @@ class DestructiveBashGuardTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions WHERE id=1'"}},
             {"tool_name": "Bash", "tool_input": {"command": "psql -c 'DELETE FROM sessions\nWHERE id=1'"}},
+            {"tool_name": "Bash", "tool_input": {"command": "helper(){ echo ok; }; helper"}},
             {"hook_event_name": "PreToolUse", "tool_input": {"command": "echo ok"}},
             {"tool_name": "Read", "tool_input": {"file_path": "README.md"}},
         ]

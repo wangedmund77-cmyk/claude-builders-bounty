@@ -21,6 +21,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `DELETE FROM ...` without a `WHERE` clause
 - high-risk system operations: `mkfs`, raw `dd ... of=/dev/...` writes, and
   recursive `chmod 777 /`
+- Bash fork bombs that define and immediately call a recursively piped
+  background function, including the classic `:(){ :|:& };:` shape
 
 The same checks are applied to commands wrapped by shell execution helpers such
 as `bash -c 'rm -rf build'` or `sh -lc 'git push --force'`.

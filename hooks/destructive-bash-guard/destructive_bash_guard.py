@@ -33,6 +33,17 @@ SQL_STATEMENT_START_RE = re.compile(
     r"\b(select|insert|update|delete|drop|truncate|create|alter|merge)\b",
     re.IGNORECASE,
 )
+BASH_FUNCTION_NAME = r"[A-Za-z_:.][A-Za-z0-9_:.]*"
+BASH_FUNCTION_DEFINITION_RES = (
+    re.compile(
+        rf"(?P<name>{BASH_FUNCTION_NAME})\s*\(\)\s*\{{(?P<body>.*?)\}}\s*;?\s*(?P=name)(?=$|[\s;])",
+        re.DOTALL,
+    ),
+    re.compile(
+        rf"function\s+(?P<name>{BASH_FUNCTION_NAME})\s*\{{(?P<body>.*?)\}}\s*;?\s*(?P=name)(?=$|[\s;])",
+        re.DOTALL,
+    ),
+)
 SHELL_EXECUTABLES = {"bash", "dash", "fish", "ksh", "sh", "zsh"}
 
 
@@ -146,6 +157,16 @@ def has_recursive_chmod_root(command: str) -> bool:
     return False
 
 
+def has_shell_fork_bomb(command: str) -> bool:
+    for function_definition_re in BASH_FUNCTION_DEFINITION_RES:
+        for match in function_definition_re.finditer(command):
+            name = re.escape(match.group("name"))
+            body = match.group("body")
+            if re.search(rf"{name}\s*\|\s*{name}\s*&", body):
+                return True
+    return False
+
+
 def strip_sql_comments(command: str) -> str:
     command = SQL_BLOCK_COMMENT_RE.sub("", command)
     return SQL_LINE_COMMENT_RE.sub("", command)
@@ -205,6 +226,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: MKFS_RE.search(value) is not None, "filesystem formatting is blocked"),
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
         (has_recursive_chmod_root, "recursive chmod 777 on root is blocked"),
+        (has_shell_fork_bomb, "shell fork bomb is blocked"),
     )
     for check, reason in checks:
         if check(command):
