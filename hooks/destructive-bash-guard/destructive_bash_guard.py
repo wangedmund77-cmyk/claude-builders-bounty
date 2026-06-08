@@ -44,7 +44,11 @@ BASH_FUNCTION_DEFINITION_RES = (
         re.DOTALL,
     ),
 )
+REMOTE_SCRIPT_FETCHERS = {"curl", "wget"}
+SHELL_COMMAND_PREFIXES = {"command", "env", "sudo"}
 SHELL_EXECUTABLES = {"bash", "dash", "fish", "ksh", "sh", "zsh"}
+COMMAND_SEPARATORS = {";", "&&", "||"}
+PIPE_OPERATORS = {"|", "|&"}
 
 
 def claude_dir(home: Path | None = None) -> Path:
@@ -99,6 +103,32 @@ def shell_words(command: str) -> list[str]:
         return shlex.split(command)
     except ValueError:
         return command.split()
+
+
+def shell_tokens(command: str) -> list[str]:
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        return list(lexer)
+    except ValueError:
+        return shell_words(command)
+
+
+def executable_name(words: list[str]) -> str | None:
+    index = 0
+    while index < len(words):
+        name = Path(words[index]).name
+        if name not in SHELL_COMMAND_PREFIXES:
+            break
+        index += 1
+        while index < len(words) and words[index].startswith("-"):
+            index += 1
+        while index < len(words) and "=" in words[index] and not words[index].startswith("-"):
+            index += 1
+    if index >= len(words):
+        return None
+    return Path(words[index]).name
 
 
 def has_recursive_force_rm(command: str) -> bool:
@@ -167,6 +197,48 @@ def has_shell_fork_bomb(command: str) -> bool:
     return False
 
 
+def command_groups(tokens: list[str]) -> list[list[str]]:
+    groups: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token in COMMAND_SEPARATORS:
+            if current:
+                groups.append(current)
+            current = []
+            continue
+        current.append(token)
+    if current:
+        groups.append(current)
+    return groups
+
+
+def pipeline_segments(tokens: list[str]) -> list[list[str]]:
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token in PIPE_OPERATORS:
+            if current:
+                segments.append(current)
+            current = []
+            continue
+        current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def has_remote_fetch_to_shell(command: str) -> bool:
+    for group in command_groups(shell_tokens(command)):
+        seen_remote_fetcher = False
+        for segment in pipeline_segments(group):
+            name = executable_name(segment)
+            if seen_remote_fetcher and name in SHELL_EXECUTABLES:
+                return True
+            if name in REMOTE_SCRIPT_FETCHERS:
+                seen_remote_fetcher = True
+    return False
+
+
 def strip_sql_comments(command: str) -> str:
     command = SQL_BLOCK_COMMENT_RE.sub("", command)
     return SQL_LINE_COMMENT_RE.sub("", command)
@@ -227,6 +299,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
         (has_recursive_chmod_root, "recursive chmod 777 on root is blocked"),
         (has_shell_fork_bomb, "shell fork bomb is blocked"),
+        (has_remote_fetch_to_shell, "remote script piped to shell is blocked"),
     )
     for check, reason in checks:
         if check(command):

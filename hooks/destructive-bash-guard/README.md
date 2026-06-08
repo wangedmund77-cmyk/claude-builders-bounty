@@ -23,6 +23,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
   recursive `chmod 777 /`
 - Bash fork bombs that define and immediately call a recursively piped
   background function, including the classic `:(){ :|:& };:` shape
+- remote installer scripts piped directly into a shell, such as
+  `curl https://example.invalid/install.sh | bash` or `wget -qO- ... | sh`
 
 The same checks are applied to commands wrapped by shell execution helpers such
 as `bash -c 'rm -rf build'` or `sh -lc 'git push --force'`.
