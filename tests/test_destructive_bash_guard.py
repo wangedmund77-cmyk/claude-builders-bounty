@@ -35,6 +35,15 @@ class DestructiveBashGuardTest(unittest.TestCase):
             check=False,
         )
 
+    def denial_reason(self, result: subprocess.CompletedProcess[str]) -> str:
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        output = json.loads(result.stdout)
+        hook_output = output["hookSpecificOutput"]
+        self.assertEqual(hook_output["hookEventName"], "PreToolUse")
+        self.assertEqual(hook_output["permissionDecision"], "deny")
+        return hook_output["permissionDecisionReason"]
+
     def test_blocks_required_destructive_patterns_and_logs_attempts(self) -> None:
         payloads = [
             {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}},
@@ -81,8 +90,7 @@ class DestructiveBashGuardTest(unittest.TestCase):
             home = Path(tmp)
             for payload in payloads:
                 result = self.run_hook(payload, home)
-                self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertIn("Blocked destructive Bash command", result.stderr)
+                self.assertIn("Blocked destructive Bash command", self.denial_reason(result))
 
             log_entries = [
                 json.loads(line)
@@ -109,9 +117,9 @@ class DestructiveBashGuardTest(unittest.TestCase):
 
             result = self.run_hook(payload, home)
 
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn("Blocked destructive Bash command", result.stderr)
-            self.assertIn("Block log was not written", result.stderr)
+            reason = self.denial_reason(result)
+            self.assertIn("Blocked destructive Bash command", reason)
+            self.assertIn("Block log was not written", reason)
             self.assertFalse(target.exists())
 
     def test_allows_normal_commands_and_delete_with_where_clause(self) -> None:
@@ -131,6 +139,7 @@ class DestructiveBashGuardTest(unittest.TestCase):
             for payload in payloads:
                 result = self.run_hook(payload, home)
                 self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, "")
             self.assertFalse((home / ".claude" / "hooks" / "blocked.log").exists())
 
     def test_install_copies_hook_and_merges_bash_pre_tool_use_settings(self) -> None:

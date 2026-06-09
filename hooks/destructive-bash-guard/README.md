@@ -29,6 +29,19 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 The same checks are applied to commands wrapped by shell execution helpers such
 as `bash -c 'rm -rf build'` or `sh -lc 'git push --force'`.
 
+When a command is blocked, the hook exits successfully and prints the current
+Claude Code `PreToolUse` decision schema on stdout:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "Blocked destructive Bash command: ..."
+  }
+}
+```
+
 Blocked attempts are appended to `~/.claude/hooks/blocked.log` as JSON lines with:
 
 - timestamp
@@ -47,4 +60,4 @@ python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructi
 python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructive-bash-guard/samples/dangerous-input.json
 ```
 
-Expected result: the safe sample exits `0` without writing a block log entry; the dangerous sample exits `2`, prints a clear block message on stderr, and appends a new JSON line to `~/.claude/hooks/blocked.log`.
+Expected result: the safe sample exits `0` without writing a block log entry; the dangerous sample exits `0`, prints a structured deny decision on stdout, and appends a new JSON line to `~/.claude/hooks/blocked.log`.

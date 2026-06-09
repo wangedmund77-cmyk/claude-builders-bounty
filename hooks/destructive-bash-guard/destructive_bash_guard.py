@@ -331,6 +331,23 @@ def write_block_log(command: str, project_path: str, reason: str, home: Path | N
         handle.write(json.dumps(entry, sort_keys=True) + "\n")
 
 
+def block_message(command: str, reason: str, log_warning: str = "") -> str:
+    return (
+        f"Blocked destructive Bash command: {reason}. "
+        f"Review the command before running it manually: {command}.{log_warning}"
+    )
+
+
+def deny_payload(message: str) -> dict[str, Any]:
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": message,
+        }
+    }
+
+
 def run_hook(stdin_text: str) -> int:
     payload = load_payload(stdin_text)
     command = command_from_payload(payload)
@@ -347,12 +364,8 @@ def run_hook(stdin_text: str) -> int:
         write_block_log(command, project_path, reason)
     except OSError as exc:
         log_warning = f" Block log was not written: {exc}."
-    print(
-        f"Blocked destructive Bash command: {reason}. "
-        f"Review the command before running it manually: {command}.{log_warning}",
-        file=sys.stderr,
-    )
-    return 2
+    print(json.dumps(deny_payload(block_message(command, reason, log_warning)), sort_keys=True))
+    return 0
 
 
 def load_settings(path: Path) -> dict[str, Any]:
