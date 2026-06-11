@@ -22,13 +22,20 @@ LOG_DIR_MODE = 0o700
 LOG_FILE_MODE = 0o600
 
 DROP_TABLE_RE = re.compile(r"\bdrop\s+table\b", re.IGNORECASE)
-TRUNCATE_RE = re.compile(r"\btruncate\b", re.IGNORECASE)
+DROP_DATABASE_RE = re.compile(r"\bdrop\s+database\b", re.IGNORECASE)
+DROP_SCHEMA_RE = re.compile(r"\bdrop\s+schema\b", re.IGNORECASE)
+TRUNCATE_RE = re.compile(r"\btruncate\b(?![-/_\w])", re.IGNORECASE)
 DELETE_FROM_RE = re.compile(r"\bdelete\s+from\b", re.IGNORECASE)
 WHERE_RE = re.compile(r"\bwhere\b", re.IGNORECASE)
 SQL_LINE_COMMENT_RE = re.compile(r"--[^\r\n]*")
 SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 MKFS_RE = re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)
 DD_DEVICE_WRITE_RE = re.compile(r"\bdd\b(?=.*\bof=/dev/)", re.IGNORECASE)
+WIPEFS_RE = re.compile(r"\bwipefs\b", re.IGNORECASE)
+DEVICE_REDIRECT_RE = re.compile(
+    r"(?:^|\s)(?:>|>>)\s*/dev/(?:sd|hd|vd|xvd|nvme|mmcblk|disk)\S*",
+    re.IGNORECASE,
+)
 SQL_STATEMENT_START_RE = re.compile(
     r"\b(select|insert|update|delete|drop|truncate|create|alter|merge)\b",
     re.IGNORECASE,
@@ -46,9 +53,43 @@ BASH_FUNCTION_DEFINITION_RES = (
 )
 REMOTE_SCRIPT_FETCHERS = {"curl", "wget"}
 SHELL_COMMAND_PREFIXES = {"command", "env", "sudo"}
+TEXT_ONLY_EXECUTABLES = {
+    "awk",
+    "cat",
+    "echo",
+    "egrep",
+    "fgrep",
+    "grep",
+    "head",
+    "less",
+    "more",
+    "printf",
+    "rg",
+    "sed",
+    "tail",
+}
+PREFIX_OPTIONS_WITH_VALUE = {
+    "env": {"-u", "--unset", "-C", "--chdir"},
+    "sudo": {
+        "-C",
+        "--close-from",
+        "-g",
+        "--group",
+        "-h",
+        "--host",
+        "-p",
+        "--prompt",
+        "-T",
+        "--command-timeout",
+        "-u",
+        "--user",
+    },
+}
+GIT_FALSE_VALUES = {"0", "false", "no", "off", "n"}
 SHELL_EXECUTABLES = {"bash", "dash", "fish", "ksh", "sh", "zsh"}
 COMMAND_SEPARATORS = {";", "&&", "||"}
 PIPE_OPERATORS = {"|", "|&"}
+REDIRECT_OPERATORS = {">", ">>", "<", "<<"}
 
 
 def claude_dir(home: Path | None = None) -> Path:
@@ -122,8 +163,13 @@ def executable_name(words: list[str]) -> str | None:
         if name not in SHELL_COMMAND_PREFIXES:
             break
         index += 1
+        options_with_value = PREFIX_OPTIONS_WITH_VALUE.get(name, set())
         while index < len(words) and words[index].startswith("-"):
+            option = words[index]
             index += 1
+            option_name = option.split("=", 1)[0]
+            if option_name in options_with_value and "=" not in option and index < len(words):
+                index += 1
         while index < len(words) and "=" in words[index] and not words[index].startswith("-"):
             index += 1
     if index >= len(words):
@@ -134,7 +180,7 @@ def executable_name(words: list[str]) -> str | None:
 def has_recursive_force_rm(command: str) -> bool:
     words = shell_words(command)
     for index, word in enumerate(words):
-        if word != "rm":
+        if Path(word).name != "rm":
             continue
         options = words[index + 1 :]
         has_recursive = False
@@ -159,24 +205,58 @@ def has_recursive_force_rm(command: str) -> bool:
 def has_force_push(command: str) -> bool:
     words = shell_words(command)
     for index, word in enumerate(words):
-        if word != "git":
+        if Path(word).name != "git":
             continue
         try:
             push_index = words.index("push", index + 1)
         except ValueError:
             continue
+        git_options = words[index + 1 : push_index]
+        for option_index, option in enumerate(git_options):
+            if option != "-c" or option_index + 1 >= len(git_options):
+                continue
+            config = git_options[option_index + 1]
+            if not config.lower().startswith("push.force"):
+                continue
+            value = config.split("=", 1)[1].strip().lower() if "=" in config else "true"
+            if value not in GIT_FALSE_VALUES:
+                return True
         flags = words[push_index + 1 :]
         return any(
-            flag == "-f" or flag.startswith("--force") or flag.startswith("--force-with-lease")
+            flag == "-f"
+            or flag.startswith("--force")
+            or flag.startswith("--force-with-lease")
+            or flag.startswith("+")
             for flag in flags
         )
+    return False
+
+
+def is_plain_text_mention(command: str) -> bool:
+    tokens = shell_tokens(command)
+    if any(token in COMMAND_SEPARATORS | PIPE_OPERATORS | REDIRECT_OPERATORS for token in tokens):
+        return False
+    return executable_name(tokens) in TEXT_ONLY_EXECUTABLES
+
+
+def has_hard_git_reset(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "git":
+            continue
+        try:
+            reset_index = words.index("reset", index + 1)
+        except ValueError:
+            continue
+        if any(flag == "--hard" or flag.startswith("--hard=") for flag in words[reset_index + 1 :]):
+            return True
     return False
 
 
 def has_recursive_chmod_root(command: str) -> bool:
     words = shell_words(command)
     for index, word in enumerate(words):
-        if word != "chmod":
+        if Path(word).name != "chmod":
             continue
         args = words[index + 1 :]
         has_recursive = any(arg == "-R" or (arg.startswith("-") and "r" in arg.lower()) for arg in args)
@@ -254,11 +334,34 @@ def delete_statement_has_where(statement: str, match: re.Match[str]) -> bool:
 
 
 def has_delete_without_where(command: str) -> bool:
+    if is_plain_text_mention(command):
+        return False
     for statement in strip_sql_comments(command).split(";"):
         for match in DELETE_FROM_RE.finditer(statement):
             if not delete_statement_has_where(statement, match):
                 return True
     return False
+
+
+def has_sql_truncate(command: str) -> bool:
+    if is_plain_text_mention(command):
+        return False
+    words = shell_words(command)
+    if executable_name(words) == "truncate":
+        return False
+    return TRUNCATE_RE.search(command) is not None
+
+
+def has_drop_table(command: str) -> bool:
+    return not is_plain_text_mention(command) and DROP_TABLE_RE.search(command) is not None
+
+
+def has_drop_database(command: str) -> bool:
+    return not is_plain_text_mention(command) and DROP_DATABASE_RE.search(command) is not None
+
+
+def has_drop_schema(command: str) -> bool:
+    return not is_plain_text_mention(command) and DROP_SCHEMA_RE.search(command) is not None
 
 
 def nested_shell_commands(command: str) -> list[str]:
@@ -292,11 +395,16 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
     checks = (
         (has_recursive_force_rm, "recursive force removal is blocked"),
         (has_force_push, "force-pushing is blocked"),
-        (lambda value: DROP_TABLE_RE.search(value) is not None, "DROP TABLE is blocked"),
-        (lambda value: TRUNCATE_RE.search(value) is not None, "TRUNCATE is blocked"),
+        (has_hard_git_reset, "git reset --hard is blocked"),
+        (has_drop_table, "DROP TABLE is blocked"),
+        (has_drop_database, "DROP DATABASE is blocked"),
+        (has_drop_schema, "DROP SCHEMA is blocked"),
+        (has_sql_truncate, "TRUNCATE is blocked"),
         (has_delete_without_where, "DELETE FROM without WHERE is blocked"),
         (lambda value: MKFS_RE.search(value) is not None, "filesystem formatting is blocked"),
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
+        (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),
+        (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
         (has_recursive_chmod_root, "recursive chmod 777 on root is blocked"),
         (has_shell_fork_bomb, "shell fork bomb is blocked"),
         (has_remote_fetch_to_shell, "remote script piped to shell is blocked"),
