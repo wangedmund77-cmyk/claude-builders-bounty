@@ -253,16 +253,20 @@ def has_hard_git_reset(command: str) -> bool:
     return False
 
 
-def has_recursive_chmod_root(command: str) -> bool:
+CRITICAL_CHMOD_TARGETS = {"/", "~", "$HOME", "${HOME}"}
+DANGEROUS_CHMOD_MODES = {"000", "0000", "777", "0777"}
+
+
+def has_recursive_chmod_dangerous_target(command: str) -> bool:
     words = shell_words(command)
     for index, word in enumerate(words):
         if Path(word).name != "chmod":
             continue
         args = words[index + 1 :]
         has_recursive = any(arg == "-R" or (arg.startswith("-") and "r" in arg.lower()) for arg in args)
-        has_mode = "777" in args
-        targets_root = "/" in args
-        if has_recursive and has_mode and targets_root:
+        has_mode = any(arg in DANGEROUS_CHMOD_MODES for arg in args)
+        has_target = any(arg in CRITICAL_CHMOD_TARGETS for arg in args)
+        if has_recursive and has_mode and has_target:
             return True
     return False
 
@@ -405,7 +409,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
         (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),
         (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
-        (has_recursive_chmod_root, "recursive chmod 777 on root is blocked"),
+        (has_recursive_chmod_dangerous_target, "recursive chmod on critical paths is blocked"),
         (has_shell_fork_bomb, "shell fork bomb is blocked"),
         (has_remote_fetch_to_shell, "remote script piped to shell is blocked"),
     )

@@ -23,7 +23,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `TRUNCATE`
 - `DELETE FROM ...` without a `WHERE` clause
 - high-risk system operations: `mkfs`, raw `dd ... of=/dev/...` writes, and
-  recursive `chmod 777 /`
+  recursive chmod permission-widening or lockout modes on critical paths such
+  as `chmod -R 777 /` and `chmod -R 000 $HOME`
 - filesystem signature wipes through `wipefs`, and shell redirects that write
   directly to raw block devices such as `/dev/sdb`
 - Bash fork bombs that define and immediately call a recursively piped
