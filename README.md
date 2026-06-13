@@ -54,6 +54,8 @@ python3 hooks/destructive-bash-guard/destructive_bash_guard.py < hooks/destructi
 The safe sample exits cleanly; the dangerous sample returns a structured
 `PreToolUse` deny decision, explains the block, and writes to
 `~/.claude/hooks/blocked.log`.
+Non-empty malformed hook payloads also fail closed and are logged as
+`<invalid hook payload>`.
 The audit log path is kept user-only and symlinked log paths are refused.
 
 ---

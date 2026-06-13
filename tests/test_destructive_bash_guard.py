@@ -23,12 +23,15 @@ spec.loader.exec_module(guard)
 
 class DestructiveBashGuardTest(unittest.TestCase):
     def run_hook(self, payload: dict[str, object], home: Path) -> subprocess.CompletedProcess[str]:
+        return self.run_hook_text(json.dumps(payload), home)
+
+    def run_hook_text(self, stdin_text: str, home: Path) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env["HOME"] = str(home)
         env["CLAUDE_PROJECT_DIR"] = "/tmp/project"
         return subprocess.run(
             [sys.executable, str(HOOK)],
-            input=json.dumps(payload),
+            input=stdin_text,
             text=True,
             capture_output=True,
             env=env,
@@ -119,6 +122,25 @@ class DestructiveBashGuardTest(unittest.TestCase):
         self.assertIn("timestamp", log_entries[0])
         self.assertEqual(hooks_mode, 0o700)
         self.assertEqual(log_mode, 0o600)
+
+    def test_denies_non_empty_invalid_hook_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            for stdin_text in ("{not-json", "[]"):
+                result = self.run_hook_text(stdin_text, home)
+                reason = self.denial_reason(result)
+                self.assertIn("hook payload", reason)
+                self.assertIn("could not be trusted", reason)
+
+            log_entries = [
+                json.loads(line)
+                for line in (home / ".claude" / "hooks" / "blocked.log").read_text().splitlines()
+            ]
+
+        self.assertEqual(len(log_entries), 2)
+        self.assertEqual(log_entries[0]["command"], "<invalid hook payload>")
+        self.assertEqual(log_entries[0]["reason"], "invalid hook JSON")
+        self.assertEqual(log_entries[1]["reason"], "hook payload must be a JSON object")
 
     def test_refuses_symlinked_block_log_but_still_blocks_command(self) -> None:
         payload = {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}}

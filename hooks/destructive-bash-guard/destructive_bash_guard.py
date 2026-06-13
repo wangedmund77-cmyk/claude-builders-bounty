@@ -21,6 +21,11 @@ BLOCK_LOG = "blocked.log"
 LOG_DIR_MODE = 0o700
 LOG_FILE_MODE = 0o600
 
+
+class InvalidHookPayload(ValueError):
+    """Raised when a non-empty hook payload cannot be trusted."""
+
+
 DROP_TABLE_RE = re.compile(r"\bdrop\s+table\b", re.IGNORECASE)
 DROP_DATABASE_RE = re.compile(r"\bdrop\s+database\b", re.IGNORECASE)
 DROP_SCHEMA_RE = re.compile(r"\bdrop\s+schema\b", re.IGNORECASE)
@@ -109,9 +114,11 @@ def load_payload(stdin_text: str) -> dict[str, Any]:
         return {}
     try:
         payload = json.loads(stdin_text)
-    except json.JSONDecodeError:
-        return {}
-    return payload if isinstance(payload, dict) else {}
+    except json.JSONDecodeError as exc:
+        raise InvalidHookPayload("invalid hook JSON") from exc
+    if not isinstance(payload, dict):
+        raise InvalidHookPayload("hook payload must be a JSON object")
+    return payload
 
 
 def command_from_payload(payload: dict[str, Any]) -> str | None:
@@ -450,6 +457,10 @@ def block_message(command: str, reason: str, log_warning: str = "") -> str:
     )
 
 
+def invalid_payload_message(reason: str, log_warning: str = "") -> str:
+    return f"Blocked Bash hook payload because it could not be trusted: {reason}.{log_warning}"
+
+
 def deny_payload(message: str) -> dict[str, Any]:
     return {
         "hookSpecificOutput": {
@@ -461,7 +472,18 @@ def deny_payload(message: str) -> dict[str, Any]:
 
 
 def run_hook(stdin_text: str) -> int:
-    payload = load_payload(stdin_text)
+    try:
+        payload = load_payload(stdin_text)
+    except InvalidHookPayload as exc:
+        reason = str(exc)
+        log_warning = ""
+        try:
+            write_block_log("<invalid hook payload>", os.getcwd(), reason)
+        except OSError as log_exc:
+            log_warning = f" Block log was not written: {log_exc}."
+        print(json.dumps(deny_payload(invalid_payload_message(reason, log_warning)), sort_keys=True))
+        return 0
+
     command = command_from_payload(payload)
     if command is None:
         return 0

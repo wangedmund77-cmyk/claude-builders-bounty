@@ -57,6 +57,9 @@ Blocked attempts are appended to `~/.claude/hooks/blocked.log` as JSON lines wit
 - project path
 - reason
 
+Non-empty malformed hook payloads fail closed with the same structured deny
+schema and are logged as `<invalid hook payload>`.
+
 The hook creates `~/.claude/hooks` with user-only permissions, writes
 `blocked.log` as user-read/write only, and refuses to write the audit log through
 a symlinked log path.
