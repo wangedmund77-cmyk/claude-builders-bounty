@@ -260,7 +260,7 @@ def has_hard_git_reset(command: str) -> bool:
     return False
 
 
-CRITICAL_CHMOD_TARGETS = {"/", "~", "$HOME", "${HOME}"}
+CRITICAL_RECURSIVE_TARGETS = {"/", "~", "$HOME", "${HOME}"}
 DANGEROUS_CHMOD_MODES = {"000", "0000", "777", "0777"}
 
 
@@ -272,8 +272,37 @@ def has_recursive_chmod_dangerous_target(command: str) -> bool:
         args = words[index + 1 :]
         has_recursive = any(arg == "-R" or (arg.startswith("-") and "r" in arg.lower()) for arg in args)
         has_mode = any(arg in DANGEROUS_CHMOD_MODES for arg in args)
-        has_target = any(arg in CRITICAL_CHMOD_TARGETS for arg in args)
+        has_target = any(arg in CRITICAL_RECURSIVE_TARGETS for arg in args)
         if has_recursive and has_mode and has_target:
+            return True
+    return False
+
+
+def has_recursive_ownership_dangerous_target(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name not in {"chown", "chgrp"}:
+            continue
+        args = words[index + 1 :]
+        has_recursive = any(
+            arg == "-R" or arg == "--recursive" or (arg.startswith("-") and "r" in arg.lower())
+            for arg in args
+        )
+        has_target = any(arg in CRITICAL_RECURSIVE_TARGETS for arg in args)
+        if has_recursive and has_target:
+            return True
+    return False
+
+
+def has_find_delete_dangerous_target(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "find":
+            continue
+        args = words[index + 1 :]
+        has_critical_target = any(arg in CRITICAL_RECURSIVE_TARGETS for arg in args)
+        has_delete_action = any(arg == "-delete" for arg in args)
+        if has_critical_target and has_delete_action:
             return True
     return False
 
@@ -417,6 +446,8 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),
         (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
         (has_recursive_chmod_dangerous_target, "recursive chmod on critical paths is blocked"),
+        (has_recursive_ownership_dangerous_target, "recursive ownership changes on critical paths are blocked"),
+        (has_find_delete_dangerous_target, "find -delete on critical paths is blocked"),
         (has_shell_fork_bomb, "shell fork bomb is blocked"),
         (has_remote_fetch_to_shell, "remote script piped to shell is blocked"),
     )
