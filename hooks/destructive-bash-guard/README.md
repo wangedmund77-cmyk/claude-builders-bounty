@@ -30,6 +30,7 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `find -delete` sweeps on critical paths, such as `find / -delete`
 - filesystem signature wipes through `wipefs`, and shell redirects that write
   directly to raw block devices such as `/dev/sdb`
+- irreversible file shredding through `shred`
 - Bash fork bombs that define and immediately call a recursively piped
   background function, including the classic `:(){ :|:& };:` shape
 - remote installer scripts piped directly into a shell, such as
