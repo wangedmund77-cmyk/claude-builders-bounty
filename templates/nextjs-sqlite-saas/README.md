@@ -8,8 +8,9 @@ using Next.js 15 App Router, TypeScript, SQLite, and server-first React.
 - `CLAUDE.md`: the template to copy into a project root.
 - `GREENFIELD_TEST_NOTES.md`: smoke-test notes for checking whether Claude Code
   understands the template without extra clarification.
-- `validate_template.py`: static acceptance check for the required sections and
-  stack/pattern signals.
+- `validate_template.py`: static acceptance check for the required sections,
+  stack/pattern signals, opinionated reasons, greenfield smoke prompts, README
+  acceptance mapping, and placeholder hygiene.
 
 ## Setup
 
@@ -29,7 +30,8 @@ python3 templates/nextjs-sqlite-saas/validate_template.py
 ```
 
 This check confirms the template still contains the required stack, structure,
-migration, command, testing, and anti-pattern guidance.
+migration, command, testing, anti-pattern guidance, greenfield smoke-test notes,
+and enough `reason:` clauses to stay opinionated rather than generic.
 
 ## What It Covers
 
