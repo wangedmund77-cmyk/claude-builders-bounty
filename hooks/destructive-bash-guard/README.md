@@ -37,9 +37,11 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
   `curl https://example.invalid/install.sh | bash` or `wget -qO- ... | sh`
 
 The same checks are applied to commands wrapped by shell execution helpers such
-as `bash -c 'rm -rf build'` or `sh -lc 'git push --force'`. Plain text
-inspection commands such as `grep 'DROP TABLE' docs.md` are allowed when they
-are not piped or redirected into another command.
+as `bash -c 'rm -rf build'` or `sh -lc 'git push --force'`, and through
+`sudo`, `env`, or `command` wrappers such as `sudo -n rm -rf /tmp/build`.
+Plain text inspection commands such as `grep 'DROP TABLE' docs.md` and
+`sudo -u root echo rm -rf /tmp/build` are allowed when they are not piped or
+redirected into another command.
 
 When a command is blocked, the hook exits successfully and prints the current
 Claude Code `PreToolUse` decision schema on stdout:

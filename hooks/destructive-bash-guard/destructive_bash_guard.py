@@ -436,6 +436,9 @@ def nested_shell_blocked_reason(command: str, depth: int) -> str | None:
 
 
 def blocked_reason(command: str, depth: int = 0) -> str | None:
+    if is_plain_text_mention(command):
+        return None
+
     checks = (
         (has_recursive_force_rm, "recursive force removal is blocked"),
         (has_force_push, "force-pushing is blocked"),
