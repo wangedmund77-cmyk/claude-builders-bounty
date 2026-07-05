@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "CLAUDE.md"
 README = ROOT / "README.md"
 GREENFIELD_NOTES = ROOT / "GREENFIELD_TEST_NOTES.md"
+GREENFIELD_SMOKE = ROOT / "smoke_greenfield.py"
 MIN_REASON_CLAUSES = 45
 MIN_SMOKE_PROMPTS = 5
 
@@ -57,6 +58,7 @@ REQUIRED_README_MAPPINGS = [
     "Opinionated reasons",
     "Greenfield usability",
     "Static acceptance check",
+    "Executable greenfield smoke check",
 ]
 
 REQUIRED_GREENFIELD_SIGNALS = [
@@ -91,6 +93,7 @@ def main() -> int:
     missing_signals = missing_items(text, REQUIRED_SIGNALS)
     missing_readme_mappings = missing_items(readme, REQUIRED_README_MAPPINGS)
     missing_greenfield_signals = missing_items(greenfield_notes, REQUIRED_GREENFIELD_SIGNALS)
+    missing_smoke_file = not GREENFIELD_SMOKE.exists()
     combined_text = text + readme + greenfield_notes
     placeholder_hits = [token for token in DISALLOWED_PLACEHOLDERS if token in combined_text]
     if "lorem ipsum" in combined_text.lower():
@@ -103,6 +106,7 @@ def main() -> int:
         or missing_signals
         or missing_readme_mappings
         or missing_greenfield_signals
+        or missing_smoke_file
         or placeholder_hits
         or reason_count < MIN_REASON_CLAUSES
         or prompt_count < MIN_SMOKE_PROMPTS
@@ -116,6 +120,8 @@ def main() -> int:
             print(f"missing README mapping: {mapping}", file=sys.stderr)
         for signal in missing_greenfield_signals:
             print(f"missing greenfield note signal: {signal}", file=sys.stderr)
+        if missing_smoke_file:
+            print(f"missing greenfield smoke script: {GREENFIELD_SMOKE}", file=sys.stderr)
         for token in placeholder_hits:
             print(f"placeholder token still present: {token}", file=sys.stderr)
         if reason_count < MIN_REASON_CLAUSES:
@@ -133,7 +139,7 @@ def main() -> int:
     print("Template acceptance check passed.")
     print(f"Checked {len(REQUIRED_HEADINGS)} required headings and {len(REQUIRED_SIGNALS)} stack/pattern signals.")
     print(f"Checked {reason_count} opinionated reason clauses and {prompt_count} greenfield smoke prompts.")
-    print("Checked README acceptance mapping and placeholder hygiene.")
+    print("Checked README acceptance mapping, executable smoke script, and placeholder hygiene.")
     return 0
 
 

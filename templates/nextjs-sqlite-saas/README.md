@@ -11,6 +11,9 @@ using Next.js 15 App Router, TypeScript, SQLite, and server-first React.
 - `validate_template.py`: static acceptance check for the required sections,
   stack/pattern signals, opinionated reasons, greenfield smoke prompts, README
   acceptance mapping, and placeholder hygiene.
+- `smoke_greenfield.py`: executable greenfield smoke check that copies
+  `CLAUDE.md` into a temporary Next.js + SQLite SaaS skeleton and verifies
+  expected scripts, paths, and boundary signals.
 
 ## Setup
 
@@ -27,11 +30,13 @@ Run the static acceptance check before submitting changes:
 
 ```bash
 python3 templates/nextjs-sqlite-saas/validate_template.py
+python3 templates/nextjs-sqlite-saas/smoke_greenfield.py
 ```
 
-This check confirms the template still contains the required stack, structure,
+These checks confirm the template still contains the required stack, structure,
 migration, command, testing, anti-pattern guidance, greenfield smoke-test notes,
-and enough `reason:` clauses to stay opinionated rather than generic.
+copy-ready package scripts, expected SaaS skeleton paths, and enough `reason:`
+clauses to stay opinionated rather than generic.
 
 ## What It Covers
 
@@ -61,3 +66,4 @@ and enough `reason:` clauses to stay opinionated rather than generic.
 | Opinionated reasons | Every major rule includes a `reason:` clause |
 | Greenfield usability | `Greenfield Smoke Prompt`, copy-ready env/db snippets, `GREENFIELD_TEST_NOTES.md` |
 | Static acceptance check | `validate_template.py` |
+| Executable greenfield smoke check | `smoke_greenfield.py` |
