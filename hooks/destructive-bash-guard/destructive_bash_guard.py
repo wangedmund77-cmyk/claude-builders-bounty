@@ -58,6 +58,15 @@ BASH_FUNCTION_DEFINITION_RES = (
 )
 REMOTE_SCRIPT_FETCHERS = {"curl", "wget"}
 SHELL_COMMAND_PREFIXES = {"command", "env", "sudo"}
+SYSTEM_POWER_COMMANDS = {"halt", "poweroff", "reboot", "shutdown"}
+SYSTEMCTL_POWER_ACTIONS = {
+    "halt",
+    "hibernate",
+    "hybrid-sleep",
+    "poweroff",
+    "reboot",
+    "suspend",
+}
 TEXT_ONLY_EXECUTABLES = {
     "awk",
     "cat",
@@ -311,6 +320,22 @@ def has_shred(command: str) -> bool:
     return executable_name(shell_words(command)) == "shred"
 
 
+def has_system_power_action(command: str) -> bool:
+    words = shell_words(command)
+    name = executable_name(words)
+    if name in SYSTEM_POWER_COMMANDS:
+        return True
+    if name != "systemctl":
+        return False
+    try:
+        systemctl_index = next(
+            index for index, word in enumerate(words) if Path(word).name == "systemctl"
+        )
+    except StopIteration:
+        return False
+    return any(arg in SYSTEMCTL_POWER_ACTIONS for arg in words[systemctl_index + 1 :])
+
+
 def has_shell_fork_bomb(command: str) -> bool:
     for function_definition_re in BASH_FUNCTION_DEFINITION_RES:
         for match in function_definition_re.finditer(command):
@@ -453,6 +478,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),
         (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
         (has_shred, "irreversible file shredding is blocked"),
+        (has_system_power_action, "system power actions are blocked"),
         (has_recursive_chmod_dangerous_target, "recursive chmod on critical paths is blocked"),
         (has_recursive_ownership_dangerous_target, "recursive ownership changes on critical paths are blocked"),
         (has_find_delete_dangerous_target, "find -delete on critical paths is blocked"),
