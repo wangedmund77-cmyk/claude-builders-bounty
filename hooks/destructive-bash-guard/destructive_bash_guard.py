@@ -269,6 +269,30 @@ def has_hard_git_reset(command: str) -> bool:
     return False
 
 
+def has_forced_git_clean(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "git":
+            continue
+        try:
+            clean_index = words.index("clean", index + 1)
+        except ValueError:
+            continue
+        args = words[clean_index + 1 :]
+        has_dry_run = any(
+            arg in {"-n", "--dry-run"} or (arg.startswith("-") and "n" in arg.lstrip("-"))
+            for arg in args
+        )
+        if has_dry_run:
+            continue
+        if any(
+            arg == "--force" or arg.startswith("--force=") or (arg.startswith("-") and "f" in arg)
+            for arg in args
+        ):
+            return True
+    return False
+
+
 CRITICAL_RECURSIVE_TARGETS = {"/", "~", "$HOME", "${HOME}"}
 DANGEROUS_CHMOD_MODES = {"000", "0000", "777", "0777"}
 
@@ -468,6 +492,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (has_recursive_force_rm, "recursive force removal is blocked"),
         (has_force_push, "force-pushing is blocked"),
         (has_hard_git_reset, "git reset --hard is blocked"),
+        (has_forced_git_clean, "forced git clean is blocked"),
         (has_drop_table, "DROP TABLE is blocked"),
         (has_drop_database, "DROP DATABASE is blocked"),
         (has_drop_schema, "DROP SCHEMA is blocked"),

@@ -18,6 +18,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `git push --force`, `git push --force-with-lease`, `git push -f`,
   force refspecs such as `+main`, and `git -c push.force=true push`
 - `git reset --hard`
+- forced `git clean` commands that delete untracked files, such as
+  `git clean -fd` and `git clean -xdf`
 - `DROP TABLE`
 - `DROP DATABASE` and `DROP SCHEMA`
 - `TRUNCATE`
