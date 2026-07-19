@@ -37,6 +37,9 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
   `systemctl poweroff`
 - Bash fork bombs that define and immediately call a recursively piped
   background function, including the classic `:(){ :|:& };:` shape
+- common reverse-shell launch patterns, including interactive shell redirects
+  through `/dev/tcp`, netcat `-e`/`--exec`, `socat ... EXEC:/bin/sh`,
+  mkfifo/netcat shell pipes, and Python socket/`dup2` shells
 - remote installer scripts piped directly into a shell, such as
   `curl https://example.invalid/install.sh | bash` or `wget -qO- ... | sh`
 

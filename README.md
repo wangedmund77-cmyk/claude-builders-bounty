@@ -57,6 +57,9 @@ The safe sample exits cleanly; the dangerous sample returns a structured
 Non-empty malformed hook payloads also fail closed and are logged as
 `<invalid hook payload>`.
 The audit log path is kept user-only and symlinked log paths are refused.
+The guard also blocks common reverse-shell launch patterns, including
+`/dev/tcp` interactive shells, netcat exec shells, socat exec shells, and
+Python socket/`dup2` shells.
 
 ---
 

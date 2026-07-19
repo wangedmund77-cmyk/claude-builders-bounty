@@ -41,6 +41,15 @@ DEVICE_REDIRECT_RE = re.compile(
     r"(?:^|\s)(?:>|>>)\s*/dev/(?:sd|hd|vd|xvd|nvme|mmcblk|disk)\S*",
     re.IGNORECASE,
 )
+DEV_TCP_RE = re.compile(r"/dev/(?:tcp|udp)/[^/\s]+/\d+", re.IGNORECASE)
+SHELL_INTERACTIVE_RE = re.compile(
+    r"\b(?:bash|dash|fish|ksh|sh|zsh)\b\s+[^;&|]*-i\b",
+    re.IGNORECASE,
+)
+PYTHON_REVERSE_SHELL_RE = re.compile(
+    r"\bsocket\b.*\bconnect\s*\(.*\bdup2\s*\(.*(?:/bin/(?:ba)?sh|pty\.spawn)",
+    re.IGNORECASE | re.DOTALL,
+)
 SQL_STATEMENT_START_RE = re.compile(
     r"\b(select|insert|update|delete|drop|truncate|create|alter|merge)\b",
     re.IGNORECASE,
@@ -57,7 +66,10 @@ BASH_FUNCTION_DEFINITION_RES = (
     ),
 )
 REMOTE_SCRIPT_FETCHERS = {"curl", "wget"}
+NETCAT_EXECUTABLES = {"nc", "ncat", "netcat"}
+NETCAT_EXEC_FLAGS = {"-e", "-c", "--exec", "--sh-exec"}
 SHELL_COMMAND_PREFIXES = {"command", "env", "sudo"}
+SHELL_NAMES = {"bash", "dash", "fish", "ksh", "sh", "zsh"}
 SYSTEM_POWER_COMMANDS = {"halt", "poweroff", "reboot", "shutdown"}
 SYSTEMCTL_POWER_ACTIONS = {
     "halt",
@@ -412,6 +424,81 @@ def has_remote_fetch_to_shell(command: str) -> bool:
     return False
 
 
+def has_netcat_exec_shell(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name not in NETCAT_EXECUTABLES:
+            continue
+        args = words[index + 1 :]
+        for arg_index, arg in enumerate(args):
+            if arg in NETCAT_EXEC_FLAGS:
+                return True
+            if arg.startswith("--exec=") or arg.startswith("--sh-exec="):
+                return True
+            if arg == "-U":
+                continue
+            if arg in SHELL_NAMES or arg.endswith(("/sh", "/bash", "/zsh")):
+                previous = args[arg_index - 1] if arg_index else ""
+                if previous in NETCAT_EXEC_FLAGS:
+                    return True
+    return False
+
+
+def has_socat_exec_shell(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "socat":
+            continue
+        args = [arg.lower() for arg in words[index + 1 :]]
+        has_network_endpoint = any(
+            arg.startswith(("tcp:", "tcp4:", "tcp6:", "tcp-connect:", "openssl:")) for arg in args
+        )
+        has_shell_exec = any(
+            arg.startswith(("exec:", "system:")) and any(shell in arg for shell in ("/sh", "/bash", "/zsh"))
+            for arg in args
+        )
+        if has_network_endpoint and has_shell_exec:
+            return True
+    return False
+
+
+def has_mkfifo_netcat_shell(command: str) -> bool:
+    words = shell_words(command)
+    has_mkfifo = any(Path(word).name == "mkfifo" for word in words)
+    has_netcat = any(Path(word).name in NETCAT_EXECUTABLES for word in words)
+    if not has_mkfifo or not has_netcat:
+        return False
+    return any(shell in command for shell in ("/bin/sh", "/bin/bash", " sh -i", " bash -i"))
+
+
+def has_dev_tcp_reverse_shell(command: str) -> bool:
+    if DEV_TCP_RE.search(command) is None:
+        return False
+    if SHELL_INTERACTIVE_RE.search(command):
+        return True
+    return any(marker in command for marker in (">&", "0>&1", "1>&", "2>&1", "<>", "exec "))
+
+
+def has_python_reverse_shell(command: str) -> bool:
+    words = shell_words(command)
+    if not any(Path(word).name.startswith("python") for word in words):
+        return False
+    return PYTHON_REVERSE_SHELL_RE.search(command) is not None
+
+
+def has_reverse_shell(command: str) -> bool:
+    return any(
+        check(command)
+        for check in (
+            has_dev_tcp_reverse_shell,
+            has_netcat_exec_shell,
+            has_socat_exec_shell,
+            has_mkfifo_netcat_shell,
+            has_python_reverse_shell,
+        )
+    )
+
+
 def strip_sql_comments(command: str) -> str:
     command = SQL_BLOCK_COMMENT_RE.sub("", command)
     return SQL_LINE_COMMENT_RE.sub("", command)
@@ -508,6 +595,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (has_recursive_ownership_dangerous_target, "recursive ownership changes on critical paths are blocked"),
         (has_find_delete_dangerous_target, "find -delete on critical paths is blocked"),
         (has_shell_fork_bomb, "shell fork bomb is blocked"),
+        (has_reverse_shell, "reverse-shell launch patterns are blocked"),
         (has_remote_fetch_to_shell, "remote script piped to shell is blocked"),
     )
     for check, reason in checks:
