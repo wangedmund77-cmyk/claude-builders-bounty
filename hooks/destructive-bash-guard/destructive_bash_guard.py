@@ -31,6 +31,10 @@ DROP_DATABASE_RE = re.compile(r"\bdrop\s+database\b", re.IGNORECASE)
 DROP_SCHEMA_RE = re.compile(r"\bdrop\s+schema\b", re.IGNORECASE)
 TRUNCATE_RE = re.compile(r"\btruncate\b(?![-/_\w])", re.IGNORECASE)
 DELETE_FROM_RE = re.compile(r"\bdelete\s+from\b", re.IGNORECASE)
+UPDATE_SET_RE = re.compile(
+    r"\bupdate\s+(?:only\s+)?(?:[`\"[\]\w.]+)\s+set\b",
+    re.IGNORECASE,
+)
 WHERE_RE = re.compile(r"\bwhere\b", re.IGNORECASE)
 SQL_LINE_COMMENT_RE = re.compile(r"--[^\r\n]*")
 SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
@@ -305,6 +309,113 @@ def has_forced_git_clean(command: str) -> bool:
     return False
 
 
+def has_worktree_git_checkout(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "git":
+            continue
+        try:
+            checkout_index = words.index("checkout", index + 1)
+        except ValueError:
+            continue
+        args = words[checkout_index + 1 :]
+        if "--" in args and args.index("--") + 1 < len(args):
+            return True
+    return False
+
+
+def restore_has_worktree_flag(args: list[str]) -> bool:
+    return any(
+        arg == "--worktree"
+        or arg == "-W"
+        or (arg.startswith("-") and not arg.startswith("--") and "W" in arg[1:])
+        for arg in args
+    )
+
+
+def restore_has_staged_flag(args: list[str]) -> bool:
+    return any(
+        arg == "--staged"
+        or arg == "-S"
+        or (arg.startswith("-") and not arg.startswith("--") and "S" in arg[1:])
+        for arg in args
+    )
+
+
+def restore_has_pathspec(args: list[str]) -> bool:
+    options_with_value = {"--source", "-s", "--pathspec-from-file"}
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            return index + 1 < len(args)
+        if arg in options_with_value:
+            index += 2
+            continue
+        if arg.startswith("--source=") or arg.startswith("--pathspec-from-file="):
+            index += 1
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        return True
+    return False
+
+
+def has_worktree_git_restore(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "git":
+            continue
+        try:
+            restore_index = words.index("restore", index + 1)
+        except ValueError:
+            continue
+        args = words[restore_index + 1 :]
+        if restore_has_staged_flag(args) and not restore_has_worktree_flag(args):
+            continue
+        if restore_has_pathspec(args):
+            return True
+    return False
+
+
+def has_forced_branch_delete(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "git":
+            continue
+        try:
+            branch_index = words.index("branch", index + 1)
+        except ValueError:
+            continue
+        args = words[branch_index + 1 :]
+        if any(
+            arg == "-D" or (arg.startswith("-") and not arg.startswith("--") and "D" in arg[1:])
+            for arg in args
+        ):
+            return True
+        has_delete = any(arg in {"-d", "--delete"} for arg in args)
+        has_force = any(arg in {"-f", "--force"} for arg in args)
+        if has_delete and has_force:
+            return True
+    return False
+
+
+def has_stash_drop_or_clear(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "git":
+            continue
+        try:
+            stash_index = words.index("stash", index + 1)
+        except ValueError:
+            continue
+        args = [arg for arg in words[stash_index + 1 :] if not arg.startswith("-")]
+        if args and args[0] in {"clear", "drop"}:
+            return True
+    return False
+
+
 CRITICAL_RECURSIVE_TARGETS = {"/", "~", "$HOME", "${HOME}"}
 DANGEROUS_CHMOD_MODES = {"000", "0000", "777", "0777"}
 
@@ -513,12 +624,31 @@ def delete_statement_has_where(statement: str, match: re.Match[str]) -> bool:
     return SQL_STATEMENT_START_RE.search(before_where) is None
 
 
+def update_statement_has_where(statement: str, match: re.Match[str]) -> bool:
+    remainder = statement[match.end() :]
+    where_match = WHERE_RE.search(remainder)
+    if where_match is None:
+        return False
+    before_where = remainder[: where_match.start()]
+    return SQL_STATEMENT_START_RE.search(before_where) is None
+
+
 def has_delete_without_where(command: str) -> bool:
     if is_plain_text_mention(command):
         return False
     for statement in strip_sql_comments(command).split(";"):
         for match in DELETE_FROM_RE.finditer(statement):
             if not delete_statement_has_where(statement, match):
+                return True
+    return False
+
+
+def has_update_without_where(command: str) -> bool:
+    if is_plain_text_mention(command):
+        return False
+    for statement in strip_sql_comments(command).split(";"):
+        for match in UPDATE_SET_RE.finditer(statement):
+            if not update_statement_has_where(statement, match):
                 return True
     return False
 
@@ -580,11 +710,16 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (has_force_push, "force-pushing is blocked"),
         (has_hard_git_reset, "git reset --hard is blocked"),
         (has_forced_git_clean, "forced git clean is blocked"),
+        (has_worktree_git_checkout, "git checkout path restore is blocked"),
+        (has_worktree_git_restore, "git restore of worktree files is blocked"),
+        (has_forced_branch_delete, "forced git branch deletion is blocked"),
+        (has_stash_drop_or_clear, "git stash deletion is blocked"),
         (has_drop_table, "DROP TABLE is blocked"),
         (has_drop_database, "DROP DATABASE is blocked"),
         (has_drop_schema, "DROP SCHEMA is blocked"),
         (has_sql_truncate, "TRUNCATE is blocked"),
         (has_delete_without_where, "DELETE FROM without WHERE is blocked"),
+        (has_update_without_where, "UPDATE without WHERE is blocked"),
         (lambda value: MKFS_RE.search(value) is not None, "filesystem formatting is blocked"),
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
         (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),

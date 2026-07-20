@@ -20,10 +20,15 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `git reset --hard`
 - forced `git clean` commands that delete untracked files, such as
   `git clean -fd` and `git clean -xdf`
+- path checkout/restore commands that discard worktree changes, such as
+  `git checkout -- .`, `git restore .`, and `git restore --worktree src/app.py`
+- forced branch deletion and stash deletion, such as `git branch -D old-work`,
+  `git stash drop`, and `git stash clear`
 - `DROP TABLE`
 - `DROP DATABASE` and `DROP SCHEMA`
 - `TRUNCATE`
 - `DELETE FROM ...` without a `WHERE` clause
+- `UPDATE ... SET ...` without a `WHERE` clause
 - high-risk system operations: `mkfs`, raw `dd ... of=/dev/...` writes, and
   recursive chmod permission-widening or lockout modes on critical paths such
   as `chmod -R 777 /` and `chmod -R 000 $HOME`
