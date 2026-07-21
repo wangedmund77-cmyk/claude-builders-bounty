@@ -83,6 +83,33 @@ SYSTEMCTL_POWER_ACTIONS = {
     "reboot",
     "suspend",
 }
+CONTAINER_RUNTIME_COMMANDS = {"docker", "podman"}
+CONTAINER_PRUNE_SCOPES = {"builder", "container", "image", "network", "system", "volume"}
+CONTAINER_GLOBAL_OPTIONS_WITH_VALUE = {
+    "-c",
+    "--config",
+    "--context",
+    "-H",
+    "--host",
+    "--log-level",
+}
+COMPOSE_OPTIONS_WITH_VALUE = {
+    "--ansi",
+    "--env-file",
+    "-f",
+    "--file",
+    "--parallel",
+    "-p",
+    "--profile",
+    "--project-directory",
+    "--project-name",
+}
+CONTAINER_REMOVE_ALL_RE = re.compile(
+    r"\b(?:docker|podman)\s+(?:rm|rmi|container\s+rm|image\s+(?:rm|remove))\b"
+    r"(?=[^;&|]*\s(?:-[A-Za-z]*f[A-Za-z]*|--force\b))"
+    r"(?=[^;&|]*\$\(\s*(?:docker|podman)\s+(?:ps|images)\b[^)]*(?:-[A-Za-z]*[aq][A-Za-z]*|--all|--quiet)[^)]*\))",
+    re.IGNORECASE,
+)
 TEXT_ONLY_EXECUTABLES = {
     "awk",
     "cat",
@@ -483,6 +510,67 @@ def has_system_power_action(command: str) -> bool:
     return any(arg in SYSTEMCTL_POWER_ACTIONS for arg in words[systemctl_index + 1 :])
 
 
+def has_force_option(args: list[str]) -> bool:
+    return any(
+        arg == "--force"
+        or arg.startswith("--force=")
+        or (arg.startswith("-") and not arg.startswith("--") and "f" in arg[1:])
+        for arg in args
+    )
+
+
+def container_runtime_args(words: list[str], runtime_index: int) -> list[str]:
+    args = words[runtime_index + 1 :]
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if not arg.startswith("-"):
+            return args[index:]
+        option_name = arg.split("=", 1)[0]
+        index += 1
+        if option_name in CONTAINER_GLOBAL_OPTIONS_WITH_VALUE and "=" not in arg:
+            index += 1
+    return []
+
+
+def compose_action_args(args: list[str]) -> tuple[str | None, list[str]]:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if not arg.startswith("-"):
+            return arg, args[index + 1 :]
+        option_name = arg.split("=", 1)[0]
+        index += 1
+        if option_name in COMPOSE_OPTIONS_WITH_VALUE and "=" not in arg:
+            index += 1
+    return None, []
+
+
+def has_destructive_container_cleanup(command: str) -> bool:
+    if CONTAINER_REMOVE_ALL_RE.search(command):
+        return True
+
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name not in CONTAINER_RUNTIME_COMMANDS:
+            continue
+        args = container_runtime_args(words, index)
+        if len(args) < 2:
+            continue
+
+        scope, action = args[0], args[1]
+        action_args = args[2:]
+        if scope in CONTAINER_PRUNE_SCOPES and action == "prune" and has_force_option(action_args):
+            return True
+        if scope == "compose":
+            compose_action, compose_args = compose_action_args(args[1:])
+            if compose_action == "down" and any(
+                arg in {"-v", "--volumes"} or arg.startswith("--rmi") for arg in compose_args
+            ):
+                return True
+    return False
+
+
 def has_shell_fork_bomb(command: str) -> bool:
     for function_definition_re in BASH_FUNCTION_DEFINITION_RES:
         for match in function_definition_re.finditer(command):
@@ -726,6 +814,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
         (has_shred, "irreversible file shredding is blocked"),
         (has_system_power_action, "system power actions are blocked"),
+        (has_destructive_container_cleanup, "destructive container runtime cleanup is blocked"),
         (has_recursive_chmod_dangerous_target, "recursive chmod on critical paths is blocked"),
         (has_recursive_ownership_dangerous_target, "recursive ownership changes on critical paths are blocked"),
         (has_find_delete_dangerous_target, "find -delete on critical paths is blocked"),

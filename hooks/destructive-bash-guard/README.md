@@ -40,6 +40,10 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - irreversible file shredding through `shred`
 - system power actions such as `shutdown -h now`, `reboot`, and
   `systemctl poweroff`
+- destructive Docker/Podman cleanup that can erase local runtime state, such
+  as `docker system prune -af --volumes`, `docker volume prune --force`,
+  `podman image prune -af`, `docker compose down --volumes`, and forced
+  all-container/all-image removals such as `docker rm -f $(docker ps -aq)`
 - Bash fork bombs that define and immediately call a recursively piped
   background function, including the classic `:(){ :|:& };:` shape
 - common reverse-shell launch patterns, including interactive shell redirects
