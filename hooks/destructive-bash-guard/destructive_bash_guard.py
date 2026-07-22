@@ -36,6 +36,10 @@ UPDATE_SET_RE = re.compile(
     re.IGNORECASE,
 )
 WHERE_RE = re.compile(r"\bwhere\b", re.IGNORECASE)
+TAUTOLOGICAL_WHERE_RE = re.compile(
+    r"^\s*\(*\s*(?:1\s*=\s*1|true)\s*\)*\s*['\"]*\s*$",
+    re.IGNORECASE,
+)
 SQL_LINE_COMMENT_RE = re.compile(r"--[^\r\n]*")
 SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 MKFS_RE = re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)
@@ -83,6 +87,8 @@ SYSTEMCTL_POWER_ACTIONS = {
     "reboot",
     "suspend",
 }
+KILL_SIGNAL_NAMES = {"9", "kill", "sigkill"}
+CRITICAL_KILL_TARGETS = {"-1", "0", "1"}
 CONTAINER_RUNTIME_COMMANDS = {"docker", "podman"}
 CONTAINER_PRUNE_SCOPES = {"builder", "container", "image", "network", "system", "volume"}
 CONTAINER_GLOBAL_OPTIONS_WITH_VALUE = {
@@ -510,6 +516,48 @@ def has_system_power_action(command: str) -> bool:
     return any(arg in SYSTEMCTL_POWER_ACTIONS for arg in words[systemctl_index + 1 :])
 
 
+def normalized_kill_signal(value: str) -> str:
+    signal = value.lower()
+    return signal[3:] if signal.startswith("sig") else signal
+
+
+def has_destructive_process_kill(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "kill":
+            continue
+
+        signal: str | None = None
+        targets: list[str] = []
+        args = words[index + 1 :]
+        arg_index = 0
+        while arg_index < len(args):
+            arg = args[arg_index]
+            if arg == "--":
+                targets.extend(args[arg_index + 1 :])
+                break
+            if arg in {"-s", "--signal"} and arg_index + 1 < len(args):
+                signal = normalized_kill_signal(args[arg_index + 1])
+                arg_index += 2
+                continue
+            if arg.startswith("--signal="):
+                signal = normalized_kill_signal(arg.split("=", 1)[1])
+                arg_index += 1
+                continue
+            if signal is None and arg.startswith("-") and len(arg) > 1:
+                candidate = normalized_kill_signal(arg[1:])
+                if candidate in KILL_SIGNAL_NAMES or candidate.isdigit():
+                    signal = candidate
+                    arg_index += 1
+                    continue
+            targets.append(arg)
+            arg_index += 1
+
+        if signal in KILL_SIGNAL_NAMES and any(target in CRITICAL_KILL_TARGETS for target in targets):
+            return True
+    return False
+
+
 def has_force_option(args: list[str]) -> bool:
     return any(
         arg == "--force"
@@ -703,22 +751,23 @@ def strip_sql_comments(command: str) -> str:
     return SQL_LINE_COMMENT_RE.sub("", command)
 
 
-def delete_statement_has_where(statement: str, match: re.Match[str]) -> bool:
+def destructive_statement_where_clause(statement: str, match: re.Match[str]) -> str | None:
     remainder = statement[match.end() :]
     where_match = WHERE_RE.search(remainder)
     if where_match is None:
-        return False
+        return None
     before_where = remainder[: where_match.start()]
-    return SQL_STATEMENT_START_RE.search(before_where) is None
+    if SQL_STATEMENT_START_RE.search(before_where) is not None:
+        return None
+    return remainder[where_match.end() :]
 
 
-def update_statement_has_where(statement: str, match: re.Match[str]) -> bool:
-    remainder = statement[match.end() :]
-    where_match = WHERE_RE.search(remainder)
-    if where_match is None:
-        return False
-    before_where = remainder[: where_match.start()]
-    return SQL_STATEMENT_START_RE.search(before_where) is None
+def statement_has_where(statement: str, match: re.Match[str]) -> bool:
+    return destructive_statement_where_clause(statement, match) is not None
+
+
+def where_clause_is_tautological(where_clause: str) -> bool:
+    return TAUTOLOGICAL_WHERE_RE.match(where_clause) is not None
 
 
 def has_delete_without_where(command: str) -> bool:
@@ -726,7 +775,7 @@ def has_delete_without_where(command: str) -> bool:
         return False
     for statement in strip_sql_comments(command).split(";"):
         for match in DELETE_FROM_RE.finditer(statement):
-            if not delete_statement_has_where(statement, match):
+            if not statement_has_where(statement, match):
                 return True
     return False
 
@@ -736,8 +785,20 @@ def has_update_without_where(command: str) -> bool:
         return False
     for statement in strip_sql_comments(command).split(";"):
         for match in UPDATE_SET_RE.finditer(statement):
-            if not update_statement_has_where(statement, match):
+            if not statement_has_where(statement, match):
                 return True
+    return False
+
+
+def has_tautological_destructive_sql_where(command: str) -> bool:
+    if is_plain_text_mention(command):
+        return False
+    for statement in strip_sql_comments(command).split(";"):
+        for statement_re in (DELETE_FROM_RE, UPDATE_SET_RE):
+            for match in statement_re.finditer(statement):
+                where_clause = destructive_statement_where_clause(statement, match)
+                if where_clause is not None and where_clause_is_tautological(where_clause):
+                    return True
     return False
 
 
@@ -808,12 +869,14 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (has_sql_truncate, "TRUNCATE is blocked"),
         (has_delete_without_where, "DELETE FROM without WHERE is blocked"),
         (has_update_without_where, "UPDATE without WHERE is blocked"),
+        (has_tautological_destructive_sql_where, "destructive SQL with tautological WHERE is blocked"),
         (lambda value: MKFS_RE.search(value) is not None, "filesystem formatting is blocked"),
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
         (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),
         (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
         (has_shred, "irreversible file shredding is blocked"),
         (has_system_power_action, "system power actions are blocked"),
+        (has_destructive_process_kill, "destructive process kill is blocked"),
         (has_destructive_container_cleanup, "destructive container runtime cleanup is blocked"),
         (has_recursive_chmod_dangerous_target, "recursive chmod on critical paths is blocked"),
         (has_recursive_ownership_dangerous_target, "recursive ownership changes on critical paths are blocked"),

@@ -29,6 +29,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `TRUNCATE`
 - `DELETE FROM ...` without a `WHERE` clause
 - `UPDATE ... SET ...` without a `WHERE` clause
+- destructive SQL guarded only by tautological filters such as
+  `DELETE FROM sessions WHERE 1=1` or `UPDATE users SET role='admin' WHERE TRUE`
 - high-risk system operations: `mkfs`, raw `dd ... of=/dev/...` writes, and
   recursive chmod permission-widening or lockout modes on critical paths such
   as `chmod -R 777 /` and `chmod -R 000 $HOME`
@@ -40,6 +42,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - irreversible file shredding through `shred`
 - system power actions such as `shutdown -h now`, `reboot`, and
   `systemctl poweroff`
+- destructive process-kill targets such as `kill -9 1`, `kill -KILL -1`, and
+  `kill --signal=KILL 0`
 - destructive Docker/Podman cleanup that can erase local runtime state, such
   as `docker system prune -af --volumes`, `docker volume prune --force`,
   `podman image prune -af`, `docker compose down --volumes`, and forced
