@@ -87,6 +87,8 @@ SYSTEMCTL_POWER_ACTIONS = {
     "reboot",
     "suspend",
 }
+INIT_POWER_COMMANDS = {"init", "telinit"}
+INIT_POWER_ACTIONS = {"0", "6"}
 KILL_SIGNAL_NAMES = {"9", "kill", "sigkill"}
 CRITICAL_KILL_TARGETS = {"-1", "0", "1"}
 CONTAINER_RUNTIME_COMMANDS = {"docker", "podman"}
@@ -505,6 +507,16 @@ def has_system_power_action(command: str) -> bool:
     name = executable_name(words)
     if name in SYSTEM_POWER_COMMANDS:
         return True
+    if name in INIT_POWER_COMMANDS:
+        try:
+            init_index = next(
+                index
+                for index, word in enumerate(words)
+                if Path(word).name in INIT_POWER_COMMANDS
+            )
+        except StopIteration:
+            return False
+        return any(arg in INIT_POWER_ACTIONS for arg in words[init_index + 1 :])
     if name != "systemctl":
         return False
     try:

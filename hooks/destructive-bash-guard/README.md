@@ -40,8 +40,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - filesystem signature wipes through `wipefs`, and shell redirects that write
   directly to raw block devices such as `/dev/sdb`
 - irreversible file shredding through `shred`
-- system power actions such as `shutdown -h now`, `reboot`, and
-  `systemctl poweroff`
+- system power actions such as `shutdown -h now`, `reboot`,
+  `systemctl poweroff`, `init 0`, and `telinit 6`
 - destructive process-kill targets such as `kill -9 1`, `kill -KILL -1`, and
   `kill --signal=KILL 0`
 - destructive Docker/Podman cleanup that can erase local runtime state, such
