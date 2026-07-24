@@ -39,6 +39,7 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `find -delete` sweeps on critical paths, such as `find / -delete`
 - filesystem signature wipes through `wipefs`, and shell redirects that write
   directly to raw block devices such as `/dev/sdb`
+- Windows drive formatting commands such as `format C:`
 - irreversible file shredding through `shred`
 - system power actions such as `shutdown -h now`, `reboot`,
   `systemctl poweroff`, `init 0`, and `telinit 6`

@@ -45,6 +45,7 @@ SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 MKFS_RE = re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)
 DD_DEVICE_WRITE_RE = re.compile(r"\bdd\b(?=.*\bof=/dev/)", re.IGNORECASE)
 WIPEFS_RE = re.compile(r"\bwipefs\b", re.IGNORECASE)
+WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:$")
 DEVICE_REDIRECT_RE = re.compile(
     r"(?:^|\s)(?:>|>>)\s*/dev/(?:sd|hd|vd|xvd|nvme|mmcblk|disk)\S*",
     re.IGNORECASE,
@@ -89,6 +90,7 @@ SYSTEMCTL_POWER_ACTIONS = {
 }
 INIT_POWER_COMMANDS = {"init", "telinit"}
 INIT_POWER_ACTIONS = {"0", "6"}
+WINDOWS_FORMAT_COMMANDS = {"format", "format.com"}
 KILL_SIGNAL_NAMES = {"9", "kill", "sigkill"}
 CRITICAL_KILL_TARGETS = {"-1", "0", "1"}
 CONTAINER_RUNTIME_COMMANDS = {"docker", "podman"}
@@ -502,6 +504,28 @@ def has_shred(command: str) -> bool:
     return executable_name(shell_words(command)) == "shred"
 
 
+def has_windows_drive_format(command: str) -> bool:
+    tokens = shell_tokens(command)
+    segment: list[str] = []
+
+    def segment_has_format_drive(words: list[str]) -> bool:
+        if not words:
+            return False
+        name = executable_name(words)
+        if name is None or name.lower() not in WINDOWS_FORMAT_COMMANDS:
+            return False
+        return any(WINDOWS_DRIVE_RE.fullmatch(arg) for arg in words)
+
+    for token in tokens:
+        if token in COMMAND_SEPARATORS | PIPE_OPERATORS | REDIRECT_OPERATORS:
+            if segment_has_format_drive(segment):
+                return True
+            segment = []
+            continue
+        segment.append(token)
+    return segment_has_format_drive(segment)
+
+
 def has_system_power_action(command: str) -> bool:
     words = shell_words(command)
     name = executable_name(words)
@@ -886,6 +910,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
         (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),
         (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
+        (has_windows_drive_format, "Windows drive formatting is blocked"),
         (has_shred, "irreversible file shredding is blocked"),
         (has_system_power_action, "system power actions are blocked"),
         (has_destructive_process_kill, "destructive process kill is blocked"),
