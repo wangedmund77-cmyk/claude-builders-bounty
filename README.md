@@ -59,7 +59,9 @@ Non-empty malformed hook payloads also fail closed and are logged as
 The audit log path is kept user-only and symlinked log paths are refused.
 The guard also blocks common reverse-shell launch patterns, including
 `/dev/tcp` interactive shells, netcat exec shells, socat exec shells, and
-Python socket/`dup2` shells.
+Python socket/`dup2` shells. It also blocks partition table mutation tools
+such as `fdisk`, `parted`, `sfdisk`, and `sgdisk` while allowing read-only
+inspection commands.
 
 ---
 

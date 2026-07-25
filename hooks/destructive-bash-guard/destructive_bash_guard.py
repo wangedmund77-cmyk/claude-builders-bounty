@@ -93,6 +93,76 @@ INIT_POWER_ACTIONS = {"0", "6"}
 WINDOWS_FORMAT_COMMANDS = {"format", "format.com"}
 KILL_SIGNAL_NAMES = {"9", "kill", "sigkill"}
 CRITICAL_KILL_TARGETS = {"-1", "0", "1"}
+PARTITION_TABLE_TOOLS = {"cfdisk", "fdisk", "gdisk", "parted", "sfdisk", "sgdisk"}
+PARTITION_HELP_FLAGS = {"--help", "--version"}
+FDISK_READ_ONLY_FLAGS = {"-l", "--list"}
+SFDISK_READ_ONLY_FLAGS = {"-d", "--dump", "-l", "--list", "-V", "--verify"}
+SGDISK_READ_ONLY_FLAGS = {"-p", "--print", "-v", "--verify"}
+SGDISK_MUTATION_PREFIXES = (
+    "-a",
+    "--set-alignment",
+    "-A",
+    "--attributes",
+    "-c",
+    "--change-name",
+    "-d",
+    "--delete",
+    "-e",
+    "--move-second-header",
+    "-g",
+    "--mbrtogpt",
+    "-G",
+    "--randomize-guids",
+    "-h",
+    "--hybrid",
+    "-I",
+    "--align-end",
+    "-j",
+    "--move-main-table",
+    "-m",
+    "--gpttombr",
+    "-n",
+    "--new",
+    "-N",
+    "--largest-new",
+    "-o",
+    "--clear",
+    "-O",
+    "--load-backup",
+    "-r",
+    "--transpose",
+    "-R",
+    "--replicate",
+    "-s",
+    "--sort",
+    "-t",
+    "--typecode",
+    "-u",
+    "--partition-guid",
+    "-U",
+    "--disk-guid",
+    "-w",
+    "--write-table",
+    "-x",
+    "--zap",
+    "-z",
+    "--zap",
+    "-Z",
+    "--zap-all",
+)
+PARTED_READ_ONLY_ACTIONS = {"help", "print", "unit", "version"}
+PARTED_MUTATION_ACTIONS = {
+    "disk_set",
+    "mklabel",
+    "mkpart",
+    "mktable",
+    "name",
+    "rescue",
+    "resizepart",
+    "rm",
+    "set",
+    "toggle",
+}
 CONTAINER_RUNTIME_COMMANDS = {"docker", "podman"}
 CONTAINER_PRUNE_SCOPES = {"builder", "container", "image", "network", "system", "volume"}
 CONTAINER_GLOBAL_OPTIONS_WITH_VALUE = {
@@ -225,7 +295,7 @@ def shell_tokens(command: str) -> list[str]:
         return shell_words(command)
 
 
-def executable_name(words: list[str]) -> str | None:
+def executable_parts(words: list[str]) -> tuple[str | None, list[str]]:
     index = 0
     while index < len(words):
         name = Path(words[index]).name
@@ -242,8 +312,13 @@ def executable_name(words: list[str]) -> str | None:
         while index < len(words) and "=" in words[index] and not words[index].startswith("-"):
             index += 1
     if index >= len(words):
-        return None
-    return Path(words[index]).name
+        return None, []
+    return Path(words[index]).name, words[index + 1 :]
+
+
+def executable_name(words: list[str]) -> str | None:
+    name, _args = executable_parts(words)
+    return name
 
 
 def has_recursive_force_rm(command: str) -> bool:
@@ -695,6 +770,47 @@ def pipeline_segments(tokens: list[str]) -> list[list[str]]:
     return segments
 
 
+def arg_matches_any_prefix(arg: str, prefixes: tuple[str, ...]) -> bool:
+    return any(arg == prefix or arg.startswith(f"{prefix}=") for prefix in prefixes)
+
+
+def partition_invocation_is_read_only(name: str, args: list[str]) -> bool:
+    if not args:
+        return False
+    if name in {"gdisk", "sgdisk"} and all(arg in PARTITION_HELP_FLAGS for arg in args):
+        return True
+    if name not in {"gdisk", "sgdisk"} and all(arg in PARTITION_HELP_FLAGS | {"-h"} for arg in args):
+        return True
+    if name in {"cfdisk", "fdisk"}:
+        return any(arg in FDISK_READ_ONLY_FLAGS for arg in args)
+    if name == "sfdisk":
+        return any(arg in SFDISK_READ_ONLY_FLAGS for arg in args)
+    if name in {"gdisk", "sgdisk"}:
+        if any(arg_matches_any_prefix(arg, SGDISK_MUTATION_PREFIXES) for arg in args):
+            return False
+        return any(arg in SGDISK_READ_ONLY_FLAGS for arg in args)
+    if name == "parted":
+        actions = {arg.lower() for arg in args if not arg.startswith("-") and not arg.startswith("/dev/")}
+        if actions & PARTED_MUTATION_ACTIONS:
+            return False
+        if any(arg in FDISK_READ_ONLY_FLAGS for arg in args):
+            return True
+        return bool(actions) and actions <= PARTED_READ_ONLY_ACTIONS
+    return False
+
+
+def has_partition_table_mutation(command: str) -> bool:
+    for group in command_groups(shell_tokens(command)):
+        for segment in pipeline_segments(group):
+            name, args = executable_parts(segment)
+            if name is None:
+                continue
+            name = name.lower()
+            if name in PARTITION_TABLE_TOOLS and not partition_invocation_is_read_only(name, args):
+                return True
+    return False
+
+
 def has_remote_fetch_to_shell(command: str) -> bool:
     for group in command_groups(shell_tokens(command)):
         seen_remote_fetcher = False
@@ -910,6 +1026,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (lambda value: DD_DEVICE_WRITE_RE.search(value) is not None, "raw device writes are blocked"),
         (lambda value: WIPEFS_RE.search(value) is not None, "filesystem signature wiping is blocked"),
         (lambda value: DEVICE_REDIRECT_RE.search(value) is not None, "raw device redirects are blocked"),
+        (has_partition_table_mutation, "partition table mutation tools are blocked"),
         (has_windows_drive_format, "Windows drive formatting is blocked"),
         (has_shred, "irreversible file shredding is blocked"),
         (has_system_power_action, "system power actions are blocked"),

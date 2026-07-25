@@ -39,6 +39,10 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `find -delete` sweeps on critical paths, such as `find / -delete`
 - filesystem signature wipes through `wipefs`, and shell redirects that write
   directly to raw block devices such as `/dev/sdb`
+- partition table mutation tools such as `fdisk /dev/sdb`,
+  `parted /dev/sdb mklabel gpt`, `sfdisk /dev/sdb`, and
+  `sgdisk --zap-all /dev/sdb`, while allowing read-only inspection commands
+  such as `fdisk -l /dev/sdb` and `parted /dev/sdb print`
 - Windows drive formatting commands such as `format C:`
 - irreversible file shredding through `shred`
 - system power actions such as `shutdown -h now`, `reboot`,
