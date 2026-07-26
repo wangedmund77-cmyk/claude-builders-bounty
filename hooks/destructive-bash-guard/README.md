@@ -53,6 +53,11 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
   as `docker system prune -af --volumes`, `docker volume prune --force`,
   `podman image prune -af`, `docker compose down --volumes`, and forced
   all-container/all-image removals such as `docker rm -f $(docker ps -aq)`
+- firewall and routing rule resets such as `iptables -F`,
+  `ip6tables --flush`, `iptables -P INPUT ACCEPT`, `nft flush ruleset`,
+  `pfctl -F all`, `ufw reset`, and `ip route flush table main`, while allowing
+  read-only inspection commands such as `iptables -L`, `nft list ruleset`,
+  `pfctl -sr`, `ufw status`, and `ip route show`
 - Bash fork bombs that define and immediately call a recursively piped
   background function, including the classic `:(){ :|:& };:` shape
 - common reverse-shell launch patterns, including interactive shell redirects

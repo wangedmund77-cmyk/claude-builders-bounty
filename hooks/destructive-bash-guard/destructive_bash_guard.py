@@ -190,6 +190,23 @@ CONTAINER_REMOVE_ALL_RE = re.compile(
     r"(?=[^;&|]*\$\(\s*(?:docker|podman)\s+(?:ps|images)\b[^)]*(?:-[A-Za-z]*[aq][A-Za-z]*|--all|--quiet)[^)]*\))",
     re.IGNORECASE,
 )
+FIREWALL_TABLE_COMMANDS = {"arptables", "ebtables", "ip6tables", "iptables"}
+FIREWALL_FLUSH_FLAGS = {"-F", "--flush", "-X", "--delete-chain"}
+FIREWALL_POLICY_FLAGS = {"-P", "--policy"}
+NFT_FLUSH_TARGETS = {"chain", "flowtable", "map", "meter", "ruleset", "set", "table"}
+NFT_DELETE_TARGETS = {"chain", "flowtable", "map", "meter", "ruleset", "set", "table"}
+PFCTL_DISABLE_OR_FLUSH_FLAGS = {"-d", "-F"}
+UFW_DESTRUCTIVE_ACTIONS = {"disable", "reset"}
+IP_GLOBAL_OPTIONS_WITH_VALUE = {
+    "-b",
+    "-batch",
+    "-family",
+    "-N",
+    "-namespace",
+    "-netns",
+    "-rcvbuf",
+}
+IP_FLUSH_FAMILIES = {"addr", "address", "route", "rule"}
 TEXT_ONLY_EXECUTABLES = {
     "awk",
     "cat",
@@ -730,6 +747,74 @@ def has_destructive_container_cleanup(command: str) -> bool:
     return False
 
 
+def stripped_ip_global_options(args: list[str]) -> list[str]:
+    index = 0
+    while index < len(args) and args[index].startswith("-"):
+        option = args[index]
+        option_name = option.split("=", 1)[0]
+        index += 1
+        if option_name in IP_GLOBAL_OPTIONS_WITH_VALUE and "=" not in option and index < len(args):
+            index += 1
+    return args[index:]
+
+
+def firewall_table_args_destructive(args: list[str]) -> bool:
+    return any(
+        arg in FIREWALL_FLUSH_FLAGS
+        or arg.startswith("--flush=")
+        or arg in FIREWALL_POLICY_FLAGS
+        or arg.startswith("--policy=")
+        for arg in args
+    )
+
+
+def nft_args_destructive(args: list[str]) -> bool:
+    actions = [arg.lower() for arg in args if not arg.startswith("-")]
+    for index, action in enumerate(actions[:-1]):
+        target = actions[index + 1]
+        if action == "flush" and target in NFT_FLUSH_TARGETS:
+            return True
+        if action == "delete" and target in NFT_DELETE_TARGETS:
+            return True
+    return False
+
+
+def pfctl_args_destructive(args: list[str]) -> bool:
+    return any(arg in PFCTL_DISABLE_OR_FLUSH_FLAGS or arg.startswith("-F") for arg in args)
+
+
+def ufw_args_destructive(args: list[str]) -> bool:
+    return any(arg.lower() in UFW_DESTRUCTIVE_ACTIONS for arg in args)
+
+
+def ip_args_destructive(args: list[str]) -> bool:
+    action_args = stripped_ip_global_options(args)
+    if len(action_args) < 2:
+        return False
+    family, action = action_args[0].lower(), action_args[1].lower()
+    return family in IP_FLUSH_FAMILIES and action == "flush"
+
+
+def has_firewall_or_routing_rule_flush(command: str) -> bool:
+    for group in command_groups(shell_tokens(command)):
+        for segment in pipeline_segments(group):
+            name, args = executable_parts(segment)
+            if name is None:
+                continue
+            name = name.lower()
+            if name in FIREWALL_TABLE_COMMANDS and firewall_table_args_destructive(args):
+                return True
+            if name == "nft" and nft_args_destructive(args):
+                return True
+            if name == "pfctl" and pfctl_args_destructive(args):
+                return True
+            if name == "ufw" and ufw_args_destructive(args):
+                return True
+            if name == "ip" and ip_args_destructive(args):
+                return True
+    return False
+
+
 def has_shell_fork_bomb(command: str) -> bool:
     for function_definition_re in BASH_FUNCTION_DEFINITION_RES:
         for match in function_definition_re.finditer(command):
@@ -1032,6 +1117,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (has_system_power_action, "system power actions are blocked"),
         (has_destructive_process_kill, "destructive process kill is blocked"),
         (has_destructive_container_cleanup, "destructive container runtime cleanup is blocked"),
+        (has_firewall_or_routing_rule_flush, "firewall and routing rule flushes are blocked"),
         (has_recursive_chmod_dangerous_target, "recursive chmod on critical paths is blocked"),
         (has_recursive_ownership_dangerous_target, "recursive ownership changes on critical paths are blocked"),
         (has_find_delete_dangerous_target, "find -delete on critical paths is blocked"),
