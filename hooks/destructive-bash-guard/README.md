@@ -30,7 +30,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `DELETE FROM ...` without a `WHERE` clause
 - `UPDATE ... SET ...` without a `WHERE` clause
 - destructive SQL guarded only by tautological filters such as
-  `DELETE FROM sessions WHERE 1=1` or `UPDATE users SET role='admin' WHERE TRUE`
+  `DELETE FROM sessions WHERE 1=1`, `DELETE FROM sessions WHERE id=id`, or
+  `UPDATE users SET role='admin' WHERE NOT FALSE`
 - high-risk system operations: `mkfs`, raw `dd ... of=/dev/...` writes, and
   recursive chmod permission-widening or lockout modes on critical paths such
   as `chmod -R 777 /` and `chmod -R 000 $HOME`

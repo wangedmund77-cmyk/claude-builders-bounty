@@ -40,6 +40,12 @@ TAUTOLOGICAL_WHERE_RE = re.compile(
     r"^\s*\(*\s*(?:1\s*=\s*1|true)\s*\)*\s*['\"]*\s*$",
     re.IGNORECASE,
 )
+SQL_TRAILING_CLAUSE_RE = re.compile(r"\b(?:returning|order\s+by|limit|offset)\b", re.IGNORECASE)
+SQL_OPERAND_RE = r"(?:[`\"\[]?[A-Za-z_][\w$]*[`\"\]]?\.)*[`\"\[]?[A-Za-z_][\w$]*[`\"\]]?|[+-]?\d+"
+SQL_COMPARISON_RE = re.compile(
+    rf"^\s*(?P<left>{SQL_OPERAND_RE})\s*(?P<operator>=|<>|!=)\s*(?P<right>{SQL_OPERAND_RE})\s*$",
+    re.IGNORECASE,
+)
 SQL_LINE_COMMENT_RE = re.compile(r"--[^\r\n]*")
 SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 MKFS_RE = re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)
@@ -1003,8 +1009,77 @@ def statement_has_where(statement: str, match: re.Match[str]) -> bool:
     return destructive_statement_where_clause(statement, match) is not None
 
 
+def strip_wrapping_parentheses(value: str) -> str:
+    value = value.strip()
+    while value.startswith("(") and value.endswith(")"):
+        depth = 0
+        balanced = True
+        for index, char in enumerate(value):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0 and index != len(value) - 1:
+                    balanced = False
+                    break
+            if depth < 0:
+                balanced = False
+                break
+        if not balanced or depth != 0:
+            break
+        value = value[1:-1].strip()
+    return value
+
+
+def normalized_where_clause(where_clause: str) -> str:
+    clause = SQL_TRAILING_CLAUSE_RE.split(where_clause, maxsplit=1)[0]
+    clause = clause.strip().rstrip(";").rstrip("'\"")
+    return strip_wrapping_parentheses(clause)
+
+
+def normalize_sql_operand(operand: str) -> str:
+    pieces = []
+    for piece in operand.strip().split("."):
+        piece = piece.strip()
+        for start, end in (("`", "`"), ('"', '"'), ("[", "]")):
+            if piece.startswith(start) and piece.endswith(end):
+                piece = piece[1:-1]
+                break
+        pieces.append(piece.lower())
+    return ".".join(pieces)
+
+
+def is_boolean_literal(value: str) -> bool:
+    return value.lower() in {"true", "false"}
+
+
+def operands_are_known_different(left: str, right: str) -> bool:
+    left_normalized = normalize_sql_operand(left)
+    right_normalized = normalize_sql_operand(right)
+    if left_normalized.lstrip("+-").isdigit() and right_normalized.lstrip("+-").isdigit():
+        return int(left_normalized) != int(right_normalized)
+    if is_boolean_literal(left_normalized) and is_boolean_literal(right_normalized):
+        return left_normalized != right_normalized
+    return False
+
+
 def where_clause_is_tautological(where_clause: str) -> bool:
-    return TAUTOLOGICAL_WHERE_RE.match(where_clause) is not None
+    clause = normalized_where_clause(where_clause)
+    if TAUTOLOGICAL_WHERE_RE.match(clause) is not None:
+        return True
+    if re.fullmatch(r"not\s+false", clause, re.IGNORECASE):
+        return True
+
+    comparison = SQL_COMPARISON_RE.match(clause)
+    if comparison is None:
+        return False
+
+    left = comparison.group("left")
+    right = comparison.group("right")
+    operator = comparison.group("operator")
+    if operator == "=":
+        return normalize_sql_operand(left) == normalize_sql_operand(right)
+    return operands_are_known_different(left, right)
 
 
 def has_delete_without_where(command: str) -> bool:
