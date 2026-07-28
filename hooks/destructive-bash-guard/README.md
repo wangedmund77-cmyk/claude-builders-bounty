@@ -15,6 +15,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 ## What It Blocks
 
 - `rm -rf` and equivalent recursive force variants such as `rm -fr`
+- recursive `rm` or direct `rmdir` against critical paths such as `/`, `~`,
+  and `$HOME`, while allowing scoped cleanup such as `rm -r build`
 - `git push --force`, `git push --force-with-lease`, `git push -f`,
   force refspecs such as `+main`, and `git -c push.force=true push`
 - `git reset --hard`

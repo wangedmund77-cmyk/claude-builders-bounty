@@ -555,6 +555,33 @@ CRITICAL_RECURSIVE_TARGETS = {"/", "~", "$HOME", "${HOME}"}
 DANGEROUS_CHMOD_MODES = {"000", "0000", "777", "0777"}
 
 
+def has_recursive_rm_dangerous_target(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "rm":
+            continue
+        args = words[index + 1 :]
+        has_recursive = any(
+            arg == "--recursive" or (arg.startswith("-") and not arg.startswith("--") and "r" in arg.lower())
+            for arg in args
+        )
+        has_target = any(arg in CRITICAL_RECURSIVE_TARGETS for arg in args)
+        if has_recursive and has_target:
+            return True
+    return False
+
+
+def has_rmdir_dangerous_target(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "rmdir":
+            continue
+        args = words[index + 1 :]
+        if any(arg in CRITICAL_RECURSIVE_TARGETS for arg in args):
+            return True
+    return False
+
+
 def has_recursive_chmod_dangerous_target(command: str) -> bool:
     words = shell_words(command)
     for index, word in enumerate(words):
@@ -1168,6 +1195,8 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
 
     checks = (
         (has_recursive_force_rm, "recursive force removal is blocked"),
+        (has_recursive_rm_dangerous_target, "recursive rm on critical paths is blocked"),
+        (has_rmdir_dangerous_target, "rmdir on critical paths is blocked"),
         (has_force_push, "force-pushing is blocked"),
         (has_hard_git_reset, "git reset --hard is blocked"),
         (has_forced_git_clean, "forced git clean is blocked"),

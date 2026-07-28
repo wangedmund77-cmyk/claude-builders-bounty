@@ -58,6 +58,12 @@ class DestructiveBashGuardTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "command rm -rf /tmp/build"}},
             {"tool_name": "Bash", "tool_input": {"command": "/bin/rm --recursive --force build"}},
             {"tool_name": "Bash", "tool_input": {"command": "rm -Rf build"}},
+            {"tool_name": "Bash", "tool_input": {"command": "rm -r $HOME"}},
+            {"tool_name": "Bash", "tool_input": {"command": "rm --recursive /"}},
+            {"tool_name": "Bash", "tool_input": {"command": "bash -c 'rm -r $HOME'"}},
+            {"tool_name": "Bash", "tool_input": {"command": "rmdir /"}},
+            {"tool_name": "Bash", "tool_input": {"command": "sudo rmdir $HOME"}},
+            {"tool_name": "Bash", "tool_input": {"command": "bash -c 'rmdir /'"}},
             {"tool_name": "Bash", "tool_input": {"command": "bash -c 'rm -rf build'"}},
             {"tool_name": "Bash", "tool_input": {"command": "sh -lc 'git push origin main --force'"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main --force"}},
@@ -263,6 +269,8 @@ class DestructiveBashGuardTest(unittest.TestCase):
     def test_allows_normal_commands_and_delete_with_where_clause(self) -> None:
         payloads = [
             {"tool_name": "Bash", "tool_input": {"command": "rm -r build"}},
+            {"tool_name": "Bash", "tool_input": {"command": "rm --recursive build"}},
+            {"tool_name": "Bash", "tool_input": {"command": "rmdir empty-cache"}},
             {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}},
             {"tool_name": "Bash", "tool_input": {"command": "git -c push.force=false push origin main"}},
             {"tool_name": "Bash", "tool_input": {"command": "git reset --soft HEAD~1"}},
