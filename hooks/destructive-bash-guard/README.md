@@ -22,6 +22,8 @@ That command copies the hook to `~/.claude/hooks/destructive-bash-guard.py`, mak
 - `git reset --hard`
 - forced `git clean` commands that delete untracked files, such as
   `git clean -fd` and `git clean -xdf`
+- `git filter-branch` history rewrites, including nested shell forms such as
+  `bash -c 'git filter-branch -f -- --all'`, while allowing help output
 - path checkout/restore commands that discard worktree changes, such as
   `git checkout -- .`, `git restore .`, and `git restore --worktree src/app.py`
 - forced branch deletion and stash deletion, such as `git branch -D old-work`,

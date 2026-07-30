@@ -246,6 +246,7 @@ PREFIX_OPTIONS_WITH_VALUE = {
     },
 }
 GIT_FALSE_VALUES = {"0", "false", "no", "off", "n"}
+GIT_FILTER_BRANCH_HELP_FLAGS = {"-h", "--help"}
 SHELL_EXECUTABLES = {"bash", "dash", "fish", "ksh", "sh", "zsh"}
 COMMAND_SEPARATORS = {";", "&&", "||"}
 PIPE_OPERATORS = {"|", "|&"}
@@ -441,6 +442,22 @@ def has_forced_git_clean(command: str) -> bool:
             for arg in args
         ):
             return True
+    return False
+
+
+def has_git_filter_branch_rewrite(command: str) -> bool:
+    words = shell_words(command)
+    for index, word in enumerate(words):
+        if Path(word).name != "git":
+            continue
+        try:
+            filter_index = words.index("filter-branch", index + 1)
+        except ValueError:
+            continue
+        args = words[filter_index + 1 :]
+        if any(arg in GIT_FILTER_BRANCH_HELP_FLAGS for arg in args):
+            continue
+        return True
     return False
 
 
@@ -1200,6 +1217,7 @@ def blocked_reason(command: str, depth: int = 0) -> str | None:
         (has_force_push, "force-pushing is blocked"),
         (has_hard_git_reset, "git reset --hard is blocked"),
         (has_forced_git_clean, "forced git clean is blocked"),
+        (has_git_filter_branch_rewrite, "git filter-branch history rewrites are blocked"),
         (has_worktree_git_checkout, "git checkout path restore is blocked"),
         (has_worktree_git_restore, "git restore of worktree files is blocked"),
         (has_forced_branch_delete, "forced git branch deletion is blocked"),
