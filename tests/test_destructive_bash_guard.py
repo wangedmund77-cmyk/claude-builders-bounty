@@ -359,6 +359,32 @@ class DestructiveBashGuardTest(unittest.TestCase):
                 self.assertEqual(result.stdout, "")
             self.assertFalse((home / ".claude" / "hooks" / "blocked.log").exists())
 
+    def test_documented_sample_payloads_match_manual_check_expectations(self) -> None:
+        samples = HOOK.parent / "samples"
+        safe_payload = (samples / "safe-input.json").read_text(encoding="utf-8")
+        dangerous_payload = (samples / "dangerous-input.json").read_text(encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+
+            safe_result = self.run_hook_text(safe_payload, home)
+            self.assertEqual(safe_result.returncode, 0, safe_result.stderr)
+            self.assertEqual(safe_result.stdout, "")
+            self.assertFalse((home / ".claude" / "hooks" / "blocked.log").exists())
+
+            dangerous_result = self.run_hook_text(dangerous_payload, home)
+            reason = self.denial_reason(dangerous_result)
+            self.assertIn("Blocked destructive Bash command", reason)
+
+            log_entries = [
+                json.loads(line)
+                for line in (home / ".claude" / "hooks" / "blocked.log").read_text().splitlines()
+            ]
+
+        self.assertEqual(len(log_entries), 1)
+        self.assertEqual(log_entries[0]["command"], "rm -rf /tmp/example-project/build")
+        self.assertEqual(log_entries[0]["project_path"], "/tmp/project")
+
     def test_install_copies_hook_and_merges_bash_pre_tool_use_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
