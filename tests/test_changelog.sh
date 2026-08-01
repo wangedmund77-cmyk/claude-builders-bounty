@@ -4,6 +4,11 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 script="$repo_root/skills/generate-changelog/changelog.sh"
+skill="$repo_root/skills/generate-changelog/SKILL.md"
+
+test -f "$skill"
+grep -q "trigger: /generate-changelog" "$skill"
+grep -q "bash skills/generate-changelog/changelog.sh" "$skill"
 
 tmp_repo="$(mktemp -d)"
 trap 'rm -rf "$tmp_repo"' EXIT

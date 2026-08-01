@@ -26,3 +26,6 @@ Use `--output` to choose a custom path:
 ```bash
 bash changelog.sh --output docs/CHANGELOG.md
 ```
+
+For Claude Code, the companion `SKILL.md` exposes the `/generate-changelog`
+workflow and points back to this script.
