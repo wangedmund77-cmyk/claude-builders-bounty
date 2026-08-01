@@ -23,3 +23,11 @@ For offline testing or CI:
 ```bash
 claude-review --diff-file path/to/change.diff
 ```
+
+## Validation
+
+```bash
+python3 -m unittest tests/test_claude_review.py -v
+python3 -m py_compile agents/pr-reviewer/claude_review.py tests/test_claude_review.py
+git diff --check
+```

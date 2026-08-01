@@ -59,6 +59,19 @@ class ClaudeReviewTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             claude_review.pr_to_diff_url("https://example.com/not-a-pr")
 
+    def test_sample_outputs_keep_required_review_structure(self):
+        samples = Path(__file__).resolve().parents[1] / "agents" / "pr-reviewer" / "samples"
+        sample_outputs = sorted(samples.glob("*.md"))
+
+        self.assertGreaterEqual(len(sample_outputs), 2)
+        for sample_output in sample_outputs:
+            rendered = sample_output.read_text(encoding="utf-8")
+            self.assertIn("### Summary of changes", rendered)
+            self.assertIn("### Identified risks", rendered)
+            self.assertIn("### Improvement suggestions", rendered)
+            self.assertRegex(rendered, r"### Confidence score: (Low|Medium|High)")
+            self.assertIn("_Reviewed PR: https://github.com/", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
