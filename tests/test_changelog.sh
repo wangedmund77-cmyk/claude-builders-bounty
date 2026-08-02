@@ -11,7 +11,8 @@ grep -q "trigger: /generate-changelog" "$skill"
 grep -q "bash skills/generate-changelog/changelog.sh" "$skill"
 
 tmp_repo="$(mktemp -d)"
-trap 'rm -rf "$tmp_repo"' EXIT
+outside_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_repo" "$outside_dir"' EXIT
 
 git -C "$tmp_repo" init -q
 git -C "$tmp_repo" config user.email "test@example.com"
@@ -37,6 +38,7 @@ git -C "$tmp_repo" commit -am "remove: drop legacy config loader" -q
 (cd "$tmp_repo" && bash "$script" --output CHANGELOG.md)
 
 grep -q "Generated from git history since v1.0.0" "$tmp_repo/CHANGELOG.md"
+grep -q "## Unreleased -" "$tmp_repo/CHANGELOG.md"
 grep -q "### Added" "$tmp_repo/CHANGELOG.md"
 grep -q "feat: add webhook retry queue" "$tmp_repo/CHANGELOG.md"
 grep -q "### Fixed" "$tmp_repo/CHANGELOG.md"
@@ -45,5 +47,15 @@ grep -q "### Changed" "$tmp_repo/CHANGELOG.md"
 grep -q "docs: clarify setup steps" "$tmp_repo/CHANGELOG.md"
 grep -q "### Removed" "$tmp_repo/CHANGELOG.md"
 grep -q "remove: drop legacy config loader" "$tmp_repo/CHANGELOG.md"
+
+bash "$script" --repo "$tmp_repo" --since v1.0.0 --version v1.1.0 --output docs/CHANGELOG.md
+
+grep -q "## v1.1.0 -" "$tmp_repo/docs/CHANGELOG.md"
+grep -q "Generated from git history since v1.0.0" "$tmp_repo/docs/CHANGELOG.md"
+
+stdout_output="$(cd "$outside_dir" && bash "$script" --repo "$tmp_repo" --since v1.0.0 --version v1.1.0 --stdout)"
+printf '%s\n' "$stdout_output" | grep -q "# Changelog"
+printf '%s\n' "$stdout_output" | grep -q "## v1.1.0 -"
+printf '%s\n' "$stdout_output" | grep -q "feat: add webhook retry queue"
 
 echo "test_changelog.sh passed"

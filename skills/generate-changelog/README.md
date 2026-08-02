@@ -4,7 +4,7 @@ Create a structured `CHANGELOG.md` from the current repository's git history.
 
 ## Setup
 
-1. Copy `changelog.sh` into the root of any git repository.
+1. Copy `changelog.sh` into a git repository or keep it in this skill folder.
 2. Run `bash changelog.sh`.
 3. Review the generated `CHANGELOG.md` before committing it.
 
@@ -25,6 +25,13 @@ Use `--output` to choose a custom path:
 
 ```bash
 bash changelog.sh --output docs/CHANGELOG.md
+```
+
+Use `--repo`, `--since`, and `--version` when generating release notes from
+outside the target repository or for a specific release:
+
+```bash
+bash changelog.sh --repo /path/to/repo --since v1.2.0 --version v1.3.0 --output docs/CHANGELOG.md
 ```
 
 For Claude Code, the companion `SKILL.md` exposes the `/generate-changelog`

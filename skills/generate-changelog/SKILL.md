@@ -17,9 +17,16 @@ history.
    bash skills/generate-changelog/changelog.sh
    ```
 
-2. Review `CHANGELOG.md` for project-specific wording before committing it.
+2. For release notes from a specific ref or another repository, pass the target
+   explicitly:
 
-3. Use stdout mode when you need a draft without writing a file:
+   ```bash
+   bash skills/generate-changelog/changelog.sh --repo /path/to/repo --since v1.2.0 --version v1.3.0 --output docs/CHANGELOG.md
+   ```
+
+3. Review `CHANGELOG.md` for project-specific wording before committing it.
+
+4. Use stdout mode when you need a draft without writing a file:
 
    ```bash
    bash skills/generate-changelog/changelog.sh --stdout
