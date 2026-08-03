@@ -33,4 +33,6 @@ history.
    ```
 
 The script finds commits since the latest git tag, groups them into Added,
-Fixed, Changed, and Removed, and writes a formatted `CHANGELOG.md`.
+Fixed, Changed, and Removed, and writes a formatted `CHANGELOG.md`. Explicit
+`--since` refs are validated before `git log` runs, including rejecting
+option-like values that start with `-`.

@@ -58,4 +58,10 @@ printf '%s\n' "$stdout_output" | grep -q "# Changelog"
 printf '%s\n' "$stdout_output" | grep -q "## v1.1.0 -"
 printf '%s\n' "$stdout_output" | grep -q "feat: add webhook retry queue"
 
+if bash "$script" --repo "$tmp_repo" --since --format=%s --stdout 2>"$outside_dir/since-option.err"; then
+  echo "expected option-like --since ref to fail" >&2
+  exit 1
+fi
+grep -q "error: --since ref cannot start with '-'" "$outside_dir/since-option.err"
+
 echo "test_changelog.sh passed"

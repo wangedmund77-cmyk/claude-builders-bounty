@@ -17,6 +17,20 @@ version="Unreleased"
 output_file="CHANGELOG.md"
 write_stdout=0
 
+validate_since_ref() {
+  local ref="$1"
+
+  if [[ "$ref" == -* ]]; then
+    echo "error: --since ref cannot start with '-': $ref" >&2
+    exit 2
+  fi
+
+  if [[ "$ref" == *$'\n'* || "$ref" == *$'\r'* ]]; then
+    echo "error: --since ref cannot contain newlines" >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)
@@ -73,7 +87,8 @@ if ! repo_root="$(git -C "$repo_path" rev-parse --show-toplevel 2>/dev/null)"; t
 fi
 
 if [[ -n "$since_ref" ]]; then
-  if ! git -C "$repo_root" rev-parse --verify --quiet "${since_ref}^{commit}" >/dev/null; then
+  validate_since_ref "$since_ref"
+  if ! git -C "$repo_root" rev-parse --verify --quiet --end-of-options "${since_ref}^{commit}" >/dev/null; then
     echo "error: --since ref not found: $since_ref" >&2
     exit 1
   fi
@@ -82,6 +97,7 @@ if [[ -n "$since_ref" ]]; then
 else
   last_tag="$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || true)"
   if [[ -n "$last_tag" ]]; then
+    validate_since_ref "$last_tag"
     range="${last_tag}..HEAD"
     range_label="since ${last_tag}"
   else
@@ -90,7 +106,7 @@ else
   fi
 fi
 
-commit_lines="$(git -C "$repo_root" log --reverse --pretty=format:'%s%x1f%h' "$range")"
+commit_lines="$(git -C "$repo_root" log --reverse --pretty=format:'%s%x1f%h' --end-of-options "$range" --)"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
