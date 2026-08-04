@@ -35,7 +35,8 @@ bash changelog.sh --repo /path/to/repo --since v1.2.0 --version v1.3.0 --output 
 ```
 
 The `--since` value must be a git ref and cannot start with `-`, so malformed
-values are rejected before they reach `git log`.
+values are rejected before they reach `git log`. Relative `--output` paths are
+resolved inside the target repository and rejected if they escape it.
 
 For Claude Code, the companion `SKILL.md` exposes the `/generate-changelog`
 workflow and points back to this script.

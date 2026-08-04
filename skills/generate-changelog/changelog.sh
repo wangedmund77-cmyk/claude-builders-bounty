@@ -31,6 +31,22 @@ validate_since_ref() {
   fi
 }
 
+validate_output_path() {
+  local path="$1"
+
+  if [[ "$path" == *$'\n'* || "$path" == *$'\r'* ]]; then
+    echo "error: --output path cannot contain newlines" >&2
+    exit 2
+  fi
+
+  case "$path" in
+    ..|../*|*/..|*/../*)
+      echo "error: --output must stay inside the target repository: $path" >&2
+      exit 2
+      ;;
+  esac
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)
@@ -85,6 +101,7 @@ if ! repo_root="$(git -C "$repo_path" rev-parse --show-toplevel 2>/dev/null)"; t
   echo "error: --repo must point inside a git repository" >&2
   exit 1
 fi
+repo_root="$(cd "$repo_root" && pwd -P)"
 
 if [[ -n "$since_ref" ]]; then
   validate_since_ref "$since_ref"
@@ -168,12 +185,34 @@ render_section() {
 if [[ "$write_stdout" -eq 1 ]]; then
   cat "$tmp_dir/CHANGELOG.md"
 else
+  validate_output_path "$output_file"
   if [[ "$output_file" = /* ]]; then
     output_path="$output_file"
+    case "$output_path" in
+      "$repo_root"/*)
+        ;;
+      *)
+        echo "error: --output must stay inside the target repository: $output_file" >&2
+        exit 2
+        ;;
+    esac
   else
     output_path="$repo_root/$output_file"
   fi
-  mkdir -p "$(dirname "$output_path")"
+  output_dir="$(dirname "$output_path")"
+  mkdir -p "$output_dir"
+  output_dir="$(cd "$output_dir" && pwd -P)"
+  output_basename="$(basename "$output_path")"
+  output_path="$output_dir/$output_basename"
+
+  case "$output_path" in
+    "$repo_root"/*)
+      ;;
+    *)
+      echo "error: --output must stay inside the target repository: $output_file" >&2
+      exit 2
+      ;;
+  esac
   cp "$tmp_dir/CHANGELOG.md" "$output_path"
   echo "Wrote $output_path"
 fi

@@ -64,4 +64,17 @@ if bash "$script" --repo "$tmp_repo" --since --format=%s --stdout 2>"$outside_di
 fi
 grep -q "error: --since ref cannot start with '-'" "$outside_dir/since-option.err"
 
+if bash "$script" --repo "$tmp_repo" --output ../CHANGELOG.md 2>"$outside_dir/output-escape.err"; then
+  echo "expected escaping --output path to fail" >&2
+  exit 1
+fi
+grep -q "error: --output must stay inside the target repository" "$outside_dir/output-escape.err"
+
+if bash "$script" --repo "$tmp_repo" --output "$outside_dir/CHANGELOG.md" 2>"$outside_dir/output-absolute.err"; then
+  echo "expected absolute --output path outside repo to fail" >&2
+  exit 1
+fi
+grep -q "error: --output must stay inside the target repository" "$outside_dir/output-absolute.err"
+test ! -f "$outside_dir/CHANGELOG.md"
+
 echo "test_changelog.sh passed"
