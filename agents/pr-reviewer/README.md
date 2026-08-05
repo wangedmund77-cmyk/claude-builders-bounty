@@ -24,6 +24,16 @@ For offline testing or CI:
 claude-review --diff-file path/to/change.diff
 ```
 
+## Optional GitHub Action Commenter
+
+`.github/workflows/claude-review-comment.yml` can post the generated Markdown
+directly to a PR in the current repository. Run the workflow manually, pass the
+PR URL, and the workflow will:
+
+1. Generate `review.md` with `agents/pr-reviewer/claude_review.py --pr`.
+2. Refuse URLs outside the current repository.
+3. Post the structured review with `gh pr comment --body-file review.md`.
+
 ## Validation
 
 ```bash

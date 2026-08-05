@@ -72,6 +72,19 @@ class ClaudeReviewTest(unittest.TestCase):
             self.assertRegex(rendered, r"### Confidence score: (Low|Medium|High)")
             self.assertIn("_Reviewed PR: https://github.com/", rendered)
 
+    def test_action_commenter_reuses_cli_output(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = root / ".github" / "workflows" / "claude-review-comment.yml"
+        contents = workflow.read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", contents)
+        self.assertIn("pull-requests: write", contents)
+        self.assertIn("issues: write", contents)
+        self.assertIn("python3 agents/pr-reviewer/claude_review.py --pr", contents)
+        self.assertIn("workflow token can only comment on PRs in this repository", contents)
+        self.assertIn("          import re\n          import sys", contents)
+        self.assertIn('gh pr comment "$pr_number" --body-file review.md', contents)
+
 
 if __name__ == "__main__":
     unittest.main()
