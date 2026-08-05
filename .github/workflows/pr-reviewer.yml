@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - ".claude/agents/pr-reviewer.md"
+      - ".github/workflows/claude-review-comment.yml"
       - "agents/pr-reviewer/**"
       - "tests/test_claude_review.py"
       - ".github/workflows/pr-reviewer.yml"
   push:
     paths:
       - ".claude/agents/pr-reviewer.md"
+      - ".github/workflows/claude-review-comment.yml"
       - "agents/pr-reviewer/**"
       - "tests/test_claude_review.py"
       - ".github/workflows/pr-reviewer.yml"

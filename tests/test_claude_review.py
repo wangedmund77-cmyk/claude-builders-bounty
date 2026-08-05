@@ -85,6 +85,10 @@ class ClaudeReviewTest(unittest.TestCase):
         self.assertIn("          import re\n          import sys", contents)
         self.assertIn('gh pr comment "$pr_number" --body-file review.md', contents)
 
+        ci_workflow = root / ".github" / "workflows" / "pr-reviewer.yml"
+        ci_contents = ci_workflow.read_text(encoding="utf-8")
+        self.assertGreaterEqual(ci_contents.count(".github/workflows/claude-review-comment.yml"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
