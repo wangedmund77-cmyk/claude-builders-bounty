@@ -1,7 +1,10 @@
+import contextlib
+import importlib.util
+import io
+import sys
+import tempfile
 import textwrap
 import unittest
-import importlib.util
-import sys
 from pathlib import Path
 
 
@@ -58,6 +61,32 @@ class ClaudeReviewTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             claude_review.pr_to_diff_url("https://example.com/not-a-pr")
+
+    def test_cli_reads_local_diff_alias(self):
+        diff = textwrap.dedent(
+            """\
+            diff --git a/README.md b/README.md
+            index 1111111..2222222 100644
+            --- a/README.md
+            +++ b/README.md
+            @@ -1 +1,2 @@
+             # Project
+            +Add setup notes.
+            """
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            diff_path = Path(tmpdir) / "change.diff"
+            diff_path.write_text(diff, encoding="utf-8")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = claude_review.main(["--diff", str(diff_path)])
+
+        self.assertEqual(exit_code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn("### Summary of changes", rendered)
+        self.assertIn("README.md", rendered)
+        self.assertNotIn("_Reviewed PR:", rendered)
 
     def test_sample_outputs_keep_required_review_structure(self):
         samples = Path(__file__).resolve().parents[1] / "agents" / "pr-reviewer" / "samples"

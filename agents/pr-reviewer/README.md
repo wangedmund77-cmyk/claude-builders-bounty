@@ -22,6 +22,8 @@ For offline testing or CI:
 
 ```bash
 claude-review --diff-file path/to/change.diff
+# Equivalent shorter form:
+claude-review --diff path/to/change.diff
 ```
 
 ## Optional GitHub Action Commenter

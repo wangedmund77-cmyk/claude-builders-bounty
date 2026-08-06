@@ -174,7 +174,12 @@ def render_markdown(analysis: ReviewAnalysis, pr_url: str | None = None) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate a structured Markdown PR review comment.")
     parser.add_argument("--pr", help="GitHub pull request URL to fetch and review")
-    parser.add_argument("--diff-file", help="Local unified diff file to review, useful for tests")
+    parser.add_argument(
+        "--diff-file",
+        "--diff",
+        dest="diff_file",
+        help="Local unified diff file to review, useful for offline checks and tests",
+    )
     args = parser.parse_args(argv)
 
     if bool(args.pr) == bool(args.diff_file):
