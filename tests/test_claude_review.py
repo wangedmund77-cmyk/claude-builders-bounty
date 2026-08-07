@@ -62,6 +62,34 @@ class ClaudeReviewTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             claude_review.pr_to_diff_url("https://example.com/not-a-pr")
 
+    def test_detects_common_review_hazards(self):
+        diff = textwrap.dedent(
+            """\
+            diff --git a/web/app.js b/web/app.js
+            index 1111111..2222222 100644
+            --- a/web/app.js
+            +++ b/web/app.js
+            @@ -1,2 +1,8 @@
+             export function render(value) {
+            +  document.body.innerHTML = value
+            +  const endpoint = "http://api.example.com"
+            +  const devOnly = "http://localhost:3000"
+            +  const key = "-----BEGIN OPENSSH PRIVATE KEY-----"
+            +  try { risky() } catch (err) {}
+            +  console.log(endpoint)
+             }
+            """
+        )
+
+        risks = "\n".join(claude_review.analyze_diff(diff).risks)
+
+        self.assertIn("DOM injection", risks)
+        self.assertIn("Plain HTTP URL", risks)
+        self.assertIn("Private key material", risks)
+        self.assertIn("Silent exception handler", risks)
+        self.assertIn("Debug output", risks)
+        self.assertNotIn("localhost:3000", risks)
+
     def test_cli_reads_local_diff_alias(self):
         diff = textwrap.dedent(
             """\

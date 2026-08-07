@@ -16,7 +16,12 @@ PR_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?
 RISK_PATTERNS = [
     ("Shell execution", re.compile(r"\b(subprocess\.[^(]+\(.*shell\s*=\s*True|os\.system\(|exec\(|eval\()")),
     ("Destructive command", re.compile(r"\brm\s+-[^\n]*r[^\n]*f\b")),
+    ("Private key material", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("Credential handling", re.compile(r"\b(secret|token|password|api[_-]?key)\b", re.I)),
+    ("DOM injection", re.compile(r"\b(?:innerHTML|outerHTML)\s*=|dangerouslySetInnerHTML")),
+    ("Plain HTTP URL", re.compile(r"(?<![A-Za-z0-9+.-])http://(?!localhost\b|127\.0\.0\.1\b|\[::1\])", re.I)),
+    ("Silent exception handler", re.compile(r"\b(?:except\s+[^:\n]*:\s*pass|catch\s*\([^)]*\)\s*\{\s*\})")),
+    ("Debug output", re.compile(r"\b(?:console\.(?:log|debug)|debugger;)\b")),
     ("Permissive CORS", re.compile(r"Access-Control-Allow-Origin['\"]?\s*[:=]\s*['\"]\*")),
     ("Database mutation", re.compile(r"\b(delete\s+from|update\s+\w+\s+set)\b(?![^;\n]*\bwhere\b)", re.I)),
 ]
@@ -103,7 +108,7 @@ def analyze_diff(diff_text: str) -> ReviewAnalysis:
     for file in files:
         lowered = file.path.lower()
         if file.risky_lines:
-            risks.extend(f"{file.path}: {line}" for line in file.risky_lines[:3])
+            risks.extend(f"{file.path}: {line}" for line in file.risky_lines[:5])
         if any(part in lowered for part in ("auth", "security", "permission", "payment", "secret")):
             risks.append(f"{file.path}: touches a security-sensitive area and needs focused regression coverage.")
         if lowered.endswith(("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "package.json")):
