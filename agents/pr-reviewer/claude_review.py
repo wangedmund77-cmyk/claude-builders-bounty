@@ -15,7 +15,14 @@ from pathlib import Path
 PR_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$")
 RISK_PATTERNS = [
     ("Shell execution", re.compile(r"\b(subprocess\.[^(]+\(.*shell\s*=\s*True|os\.system\(|exec\(|eval\()")),
-    ("Destructive command", re.compile(r"\brm\s+-[^\n]*r[^\n]*f\b")),
+    (
+        "Destructive command",
+        re.compile(
+            r"\brm\b"
+            r"(?=[^;&|#\n]*(?:-[A-Za-z]*r[A-Za-z]*|--recursive\b))"
+            r"(?=[^;&|#\n]*(?:-[A-Za-z]*f[A-Za-z]*|--force\b))"
+        ),
+    ),
     ("Private key material", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("Credential handling", re.compile(r"\b(secret|token|password|api[_-]?key)\b", re.I)),
     ("DOM injection", re.compile(r"\b(?:innerHTML|outerHTML)\s*=|dangerouslySetInnerHTML")),

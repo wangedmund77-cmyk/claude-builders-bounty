@@ -36,6 +36,13 @@ PR URL, and the workflow will:
 2. Refuse URLs outside the current repository.
 3. Post the structured review with `gh pr comment --body-file review.md`.
 
+## Sample PR Outputs
+
+Two real GitHub PR review outputs are included for bounty verification:
+
+- `agents/pr-reviewer/samples/claude-builders-pr-2710.md`
+- `agents/pr-reviewer/samples/claude-builders-pr-2738.md`
+
 ## Validation
 
 ```bash

@@ -90,6 +90,44 @@ class ClaudeReviewTest(unittest.TestCase):
         self.assertIn("Debug output", risks)
         self.assertNotIn("localhost:3000", risks)
 
+    def test_detects_destructive_rm_flag_permutations(self):
+        diff = textwrap.dedent(
+            """\
+            diff --git a/scripts/cleanup.sh b/scripts/cleanup.sh
+            index 1111111..2222222 100755
+            --- a/scripts/cleanup.sh
+            +++ b/scripts/cleanup.sh
+            @@ -1,2 +1,5 @@
+             #!/usr/bin/env bash
+            +rm -fr build
+            +rm -r -f dist
+            +rm --recursive --force cache
+            +rm -f --recursive tmp
+            """
+        )
+        risks = "\n".join(claude_review.analyze_diff(diff).risks)
+
+        self.assertIn("rm -fr build", risks)
+        self.assertIn("rm -r -f dist", risks)
+        self.assertIn("rm --recursive --force cache", risks)
+        self.assertIn("rm -f --recursive tmp", risks)
+
+        safer_diff = textwrap.dedent(
+            """\
+            diff --git a/scripts/cleanup.sh b/scripts/cleanup.sh
+            index 1111111..2222222 100755
+            --- a/scripts/cleanup.sh
+            +++ b/scripts/cleanup.sh
+            @@ -1,2 +1,4 @@
+             #!/usr/bin/env bash
+            +rm -r build
+            +rm -f stale.log
+            """
+        )
+
+        safer_risks = "\n".join(claude_review.analyze_diff(safer_diff).risks)
+        self.assertNotIn("Destructive command", safer_risks)
+
     def test_cli_reads_local_diff_alias(self):
         diff = textwrap.dedent(
             """\
