@@ -192,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         dest="diff_file",
         help="Local unified diff file to review, useful for offline checks and tests",
     )
+    parser.add_argument("--output", help="Write the Markdown review to this file instead of stdout")
     args = parser.parse_args(argv)
 
     if bool(args.pr) == bool(args.diff_file):
@@ -204,7 +205,11 @@ def main(argv: list[str] | None = None) -> int:
         else:
             diff_text = Path(args.diff_file).read_text(encoding="utf-8")
             pr_url = None
-        print(render_markdown(analyze_diff(diff_text), pr_url=pr_url))
+        rendered = render_markdown(analyze_diff(diff_text), pr_url=pr_url)
+        if args.output:
+            Path(args.output).write_text(rendered, encoding="utf-8")
+        else:
+            print(rendered)
     except Exception as exc:  # noqa: BLE001 - CLI error boundary
         print(f"claude-review: {exc}", file=sys.stderr)
         return 1

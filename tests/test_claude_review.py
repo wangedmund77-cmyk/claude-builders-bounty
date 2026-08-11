@@ -154,6 +154,36 @@ class ClaudeReviewTest(unittest.TestCase):
         self.assertIn("README.md", rendered)
         self.assertNotIn("_Reviewed PR:", rendered)
 
+    def test_cli_writes_output_file(self):
+        diff = textwrap.dedent(
+            """\
+            diff --git a/docs/usage.md b/docs/usage.md
+            index 1111111..2222222 100644
+            --- a/docs/usage.md
+            +++ b/docs/usage.md
+            @@ -1 +1,2 @@
+             # Usage
+            +Add reviewer output instructions.
+            """
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            diff_path = tmp / "change.diff"
+            output_path = tmp / "review.md"
+            diff_path.write_text(diff, encoding="utf-8")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = claude_review.main(["--diff", str(diff_path), "--output", str(output_path)])
+
+            rendered = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("### Summary of changes", rendered)
+        self.assertIn("docs/usage.md", rendered)
+        self.assertNotIn("_Reviewed PR:", rendered)
+
     def test_sample_outputs_keep_required_review_structure(self):
         samples = Path(__file__).resolve().parents[1] / "agents" / "pr-reviewer" / "samples"
         sample_outputs = sorted(samples.glob("*.md"))
@@ -175,7 +205,7 @@ class ClaudeReviewTest(unittest.TestCase):
         self.assertIn("workflow_dispatch:", contents)
         self.assertIn("pull-requests: write", contents)
         self.assertIn("issues: write", contents)
-        self.assertIn("python3 agents/pr-reviewer/claude_review.py --pr", contents)
+        self.assertIn('python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" --output review.md', contents)
         self.assertIn("workflow token can only comment on PRs in this repository", contents)
         self.assertIn("          import re\n          import sys", contents)
         self.assertIn('gh pr comment "$pr_number" --body-file review.md', contents)

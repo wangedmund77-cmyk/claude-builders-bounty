@@ -31,7 +31,7 @@ jobs:
           PR_URL: ${{ inputs.pr_url }}
         run: |
           set -euo pipefail
-          python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" > review.md
+          python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" --output review.md
           test -s review.md
 
       - name: Post review comment

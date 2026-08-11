@@ -8,7 +8,8 @@ confidence score.
 
 1. Add `agents/pr-reviewer/bin` to your `PATH`.
 2. Run `claude-review --pr https://github.com/owner/repo/pull/123`.
-3. Paste the generated Markdown into the PR after adding any project-specific test notes.
+3. Optionally write the review directly to a file with `--output review.md`.
+4. Paste the generated Markdown into the PR after adding any project-specific test notes.
 
 ## Claude Code Sub-Agent
 
@@ -24,6 +25,7 @@ For offline testing or CI:
 claude-review --diff-file path/to/change.diff
 # Equivalent shorter form:
 claude-review --diff path/to/change.diff
+claude-review --diff path/to/change.diff --output review.md
 ```
 
 ## Optional GitHub Action Commenter
@@ -32,7 +34,7 @@ claude-review --diff path/to/change.diff
 directly to a PR in the current repository. Run the workflow manually, pass the
 PR URL, and the workflow will:
 
-1. Generate `review.md` with `agents/pr-reviewer/claude_review.py --pr`.
+1. Generate `review.md` with `agents/pr-reviewer/claude_review.py --pr --output`.
 2. Refuse URLs outside the current repository.
 3. Post the structured review with `gh pr comment --body-file review.md`.
 
