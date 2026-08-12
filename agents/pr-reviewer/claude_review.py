@@ -32,6 +32,7 @@ RISK_PATTERNS = [
     ("Permissive CORS", re.compile(r"Access-Control-Allow-Origin['\"]?\s*[:=]\s*['\"]\*")),
     ("Database mutation", re.compile(r"\b(delete\s+from|update\s+\w+\s+set)\b(?![^;\n]*\bwhere\b)", re.I)),
 ]
+MAX_DIFF_CHARS = 120_000
 
 
 @dataclass
@@ -50,6 +51,9 @@ class ReviewAnalysis:
     risks: list[str]
     suggestions: list[str]
     confidence: str
+    truncated: bool = False
+    original_chars: int = 0
+    analyzed_chars: int = 0
 
 
 def pr_to_diff_url(pr_url: str) -> str:
@@ -102,11 +106,24 @@ def parse_diff(diff_text: str) -> list[FileChange]:
 
 
 def analyze_diff(diff_text: str) -> ReviewAnalysis:
+    original_chars = len(diff_text)
+    analyzed_chars = min(original_chars, MAX_DIFF_CHARS)
+    truncated = original_chars > MAX_DIFF_CHARS
+    if truncated:
+        diff_text = diff_text[:MAX_DIFF_CHARS]
+
     files = parse_diff(diff_text)
     total_additions = sum(file.additions for file in files)
     total_deletions = sum(file.deletions for file in files)
     risks: list[str] = []
     suggestions: list[str] = []
+
+    if truncated:
+        risks.append(
+            f"Diff was truncated to {analyzed_chars:,} of {original_chars:,} characters; "
+            "later files or lines were not analyzed."
+        )
+        suggestions.append("Run a narrower follow-up review for the omitted portion before relying on this result.")
 
     if not files:
         risks.append("The diff appears to be empty or could not be parsed.")
@@ -144,10 +161,20 @@ def analyze_diff(diff_text: str) -> ReviewAnalysis:
     confidence = "High"
     if total_additions + total_deletions > 800 or any(file.risky_lines for file in files):
         confidence = "Medium"
-    if not files or total_additions + total_deletions > 2000:
+    if not files or total_additions + total_deletions > 2000 or truncated:
         confidence = "Low"
 
-    return ReviewAnalysis(files, total_additions, total_deletions, risks, suggestions, confidence)
+    return ReviewAnalysis(
+        files,
+        total_additions,
+        total_deletions,
+        risks,
+        suggestions,
+        confidence,
+        truncated=truncated,
+        original_chars=original_chars,
+        analyzed_chars=analyzed_chars,
+    )
 
 
 def render_markdown(analysis: ReviewAnalysis, pr_url: str | None = None) -> str:
@@ -170,10 +197,18 @@ def render_markdown(analysis: ReviewAnalysis, pr_url: str | None = None) -> str:
             "The review below is generated from the pull request diff and should be "
             "combined with project-specific test results before merge."
         ),
-        "",
-        "### Identified risks",
-        "",
     ]
+    if analysis.truncated:
+        lines.extend(
+            [
+                "",
+                (
+                    f"Only the first {analysis.analyzed_chars:,} of {analysis.original_chars:,} diff "
+                    "characters were analyzed, so this review intentionally uses low confidence."
+                ),
+            ]
+        )
+    lines.extend(["", "### Identified risks", ""])
     lines.extend(f"- {risk}" for risk in analysis.risks)
     lines.extend(["", "### Improvement suggestions", ""])
     lines.extend(f"- {suggestion}" for suggestion in analysis.suggestions)

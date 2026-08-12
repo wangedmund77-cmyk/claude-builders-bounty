@@ -128,6 +128,30 @@ class ClaudeReviewTest(unittest.TestCase):
         safer_risks = "\n".join(claude_review.analyze_diff(safer_diff).risks)
         self.assertNotIn("Destructive command", safer_risks)
 
+    def test_large_diffs_are_truncated_with_low_confidence(self):
+        diff = textwrap.dedent(
+            """\
+            diff --git a/app/large.py b/app/large.py
+            index 1111111..2222222 100644
+            --- a/app/large.py
+            +++ b/app/large.py
+            @@ -0,0 +1,2 @@
+            +def changed():
+            +    return True
+            """
+        )
+        diff += "+padding\n" * ((claude_review.MAX_DIFF_CHARS // len("+padding\n")) + 10)
+
+        analysis = claude_review.analyze_diff(diff)
+        rendered = claude_review.render_markdown(analysis)
+
+        self.assertTrue(analysis.truncated)
+        self.assertEqual(analysis.analyzed_chars, claude_review.MAX_DIFF_CHARS)
+        self.assertEqual(analysis.confidence, "Low")
+        self.assertIn("Diff was truncated", "\n".join(analysis.risks))
+        self.assertIn("Only the first 120,000", rendered)
+        self.assertIn("Confidence score: Low", rendered)
+
     def test_cli_reads_local_diff_alias(self):
         diff = textwrap.dedent(
             """\

@@ -28,6 +28,12 @@ claude-review --diff path/to/change.diff
 claude-review --diff path/to/change.diff --output review.md
 ```
 
+## Large Diff Handling
+
+Reviews analyze the first 120,000 diff characters. If a PR exceeds that cap,
+the output includes a truncation warning and uses a Low confidence score so the
+omitted portion is not silently treated as reviewed.
+
 ## Optional GitHub Action Commenter
 
 `.github/workflows/claude-review-comment.yml` can post the generated Markdown
