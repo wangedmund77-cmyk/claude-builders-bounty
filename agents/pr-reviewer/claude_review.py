@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 import urllib.error
@@ -64,11 +65,27 @@ def pr_to_diff_url(pr_url: str) -> str:
     return f"https://github.com/{owner}/{repo}/pull/{number}.diff"
 
 
+def pr_to_api_diff_url(pr_url: str) -> str:
+    match = PR_RE.match(pr_url)
+    if not match:
+        raise ValueError("expected a GitHub pull request URL, for example https://github.com/owner/repo/pull/123")
+    owner, repo, number = match.groups()
+    return f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
+
+
+def build_diff_request(pr_url: str) -> urllib.request.Request:
+    headers = {
+        "Accept": "application/vnd.github.v3.diff",
+        "User-Agent": "claude-review-agent",
+    }
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return urllib.request.Request(pr_to_api_diff_url(pr_url), headers=headers)
+
+
 def fetch_pr_diff(pr_url: str) -> str:
-    request = urllib.request.Request(
-        pr_to_diff_url(pr_url),
-        headers={"User-Agent": "claude-review-agent"},
-    )
+    request = build_diff_request(pr_url)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.read().decode("utf-8", "replace")

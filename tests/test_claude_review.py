@@ -5,6 +5,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -59,8 +60,26 @@ class ClaudeReviewTest(unittest.TestCase):
             claude_review.pr_to_diff_url("https://github.com/owner/repo/pull/123"),
             "https://github.com/owner/repo/pull/123.diff",
         )
+        self.assertEqual(
+            claude_review.pr_to_api_diff_url("https://github.com/owner/repo/pull/123"),
+            "https://api.github.com/repos/owner/repo/pulls/123",
+        )
         with self.assertRaises(ValueError):
             claude_review.pr_to_diff_url("https://example.com/not-a-pr")
+
+    def test_build_diff_request_uses_api_accept_and_optional_token(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            request = claude_review.build_diff_request("https://github.com/owner/repo/pull/123")
+
+        self.assertEqual(request.full_url, "https://api.github.com/repos/owner/repo/pulls/123")
+        self.assertEqual(request.get_header("Accept"), "application/vnd.github.v3.diff")
+        self.assertEqual(request.get_header("User-agent"), "claude-review-agent")
+        self.assertIsNone(request.get_header("Authorization"))
+
+        with mock.patch.dict("os.environ", {"GITHUB_TOKEN": "ghs_example"}, clear=True):
+            authed_request = claude_review.build_diff_request("https://github.com/owner/repo/pull/123")
+
+        self.assertEqual(authed_request.get_header("Authorization"), "Bearer ghs_example")
 
     def test_detects_common_review_hazards(self):
         diff = textwrap.dedent(
@@ -229,6 +248,7 @@ class ClaudeReviewTest(unittest.TestCase):
         self.assertIn("workflow_dispatch:", contents)
         self.assertIn("pull-requests: write", contents)
         self.assertIn("issues: write", contents)
+        self.assertIn("GITHUB_TOKEN: ${{ github.token }}", contents)
         self.assertIn('python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" --output review.md', contents)
         self.assertIn("workflow token can only comment on PRs in this repository", contents)
         self.assertIn("          import re\n          import sys", contents)

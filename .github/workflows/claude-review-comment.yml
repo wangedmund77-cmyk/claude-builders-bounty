@@ -29,6 +29,7 @@ jobs:
       - name: Generate structured review
         env:
           PR_URL: ${{ inputs.pr_url }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" --output review.md

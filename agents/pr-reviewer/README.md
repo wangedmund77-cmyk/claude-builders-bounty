@@ -11,6 +11,10 @@ confidence score.
 3. Optionally write the review directly to a file with `--output review.md`.
 4. Paste the generated Markdown into the PR after adding any project-specific test notes.
 
+For private repositories or higher GitHub API limits, set `GITHUB_TOKEN` before
+running the CLI. The token is used only as an Authorization header when fetching
+the PR diff from GitHub's REST API.
+
 ## Claude Code Sub-Agent
 
 The companion sub-agent definition lives at `.claude/agents/pr-reviewer.md`.
