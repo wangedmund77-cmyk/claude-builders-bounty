@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -73,6 +74,14 @@ def pr_to_api_diff_url(pr_url: str) -> str:
     return f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
 
 
+def pr_to_issue_comments_url(pr_url: str) -> str:
+    match = PR_RE.match(pr_url)
+    if not match:
+        raise ValueError("expected a GitHub pull request URL, for example https://github.com/owner/repo/pull/123")
+    owner, repo, number = match.groups()
+    return f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/comments"
+
+
 def build_diff_request(pr_url: str) -> urllib.request.Request:
     headers = {
         "Accept": "application/vnd.github.v3.diff",
@@ -93,6 +102,30 @@ def fetch_pr_diff(pr_url: str) -> str:
         raise RuntimeError(f"GitHub returned HTTP {exc.code} while fetching PR diff") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"could not fetch PR diff: {exc.reason}") from exc
+
+
+def github_token() -> str:
+    token = os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("--post-comment requires GITHUB_TOKEN or GH_TOKEN")
+    return token
+
+
+def post_pr_comment(pr_url: str, body: str) -> None:
+    data = json.dumps({"body": body}).encode("utf-8")
+    request = urllib.request.Request(pr_to_issue_comments_url(pr_url), data=data, method="POST")
+    request.add_header("Accept", "application/vnd.github+json")
+    request.add_header("X-GitHub-Api-Version", "2022-11-28")
+    request.add_header("Authorization", f"Bearer {github_token()}")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("User-Agent", "claude-review-agent")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"GitHub returned HTTP {exc.code} while posting PR comment") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"could not post PR comment: {exc.reason}") from exc
 
 
 def parse_diff(diff_text: str) -> list[FileChange]:
@@ -245,10 +278,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Local unified diff file to review, useful for offline checks and tests",
     )
     parser.add_argument("--output", help="Write the Markdown review to this file instead of stdout")
+    parser.add_argument(
+        "--post-comment",
+        "--post",
+        action="store_true",
+        help="Post the generated review to the PR using GITHUB_TOKEN or GH_TOKEN",
+    )
     args = parser.parse_args(argv)
 
     if bool(args.pr) == bool(args.diff_file):
         parser.error("provide exactly one of --pr or --diff-file")
+    if args.post_comment and not args.pr:
+        parser.error("--post-comment requires --pr")
 
     try:
         if args.pr:
@@ -262,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.output).write_text(rendered, encoding="utf-8")
         else:
             print(rendered)
+        if args.post_comment:
+            post_pr_comment(args.pr, rendered)
     except Exception as exc:  # noqa: BLE001 - CLI error boundary
         print(f"claude-review: {exc}", file=sys.stderr)
         return 1

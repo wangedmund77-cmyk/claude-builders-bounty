@@ -26,18 +26,8 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Generate structured review
+      - name: Validate PR URL
         env:
-          PR_URL: ${{ inputs.pr_url }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" --output review.md
-          test -s review.md
-
-      - name: Post review comment
-        env:
-          GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ inputs.pr_url }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -56,4 +46,13 @@ jobs:
           print(match.group(2))
           PY
           )"
-          gh pr comment "$pr_number" --body-file review.md
+          test -n "$pr_number"
+
+      - name: Generate and post structured review
+        env:
+          PR_URL: ${{ inputs.pr_url }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" --output review.md --post-comment
+          test -s review.md

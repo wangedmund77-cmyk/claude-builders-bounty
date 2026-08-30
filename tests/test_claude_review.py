@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import sys
 import tempfile
 import textwrap
@@ -64,6 +65,10 @@ class ClaudeReviewTest(unittest.TestCase):
             claude_review.pr_to_api_diff_url("https://github.com/owner/repo/pull/123"),
             "https://api.github.com/repos/owner/repo/pulls/123",
         )
+        self.assertEqual(
+            claude_review.pr_to_issue_comments_url("https://github.com/owner/repo/pull/123"),
+            "https://api.github.com/repos/owner/repo/issues/123/comments",
+        )
         with self.assertRaises(ValueError):
             claude_review.pr_to_diff_url("https://example.com/not-a-pr")
 
@@ -80,6 +85,33 @@ class ClaudeReviewTest(unittest.TestCase):
             authed_request = claude_review.build_diff_request("https://github.com/owner/repo/pull/123")
 
         self.assertEqual(authed_request.get_header("Authorization"), "Bearer ghs_example")
+
+    def test_post_comment_requires_token(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "requires GITHUB_TOKEN or GH_TOKEN"):
+                claude_review.post_pr_comment("https://github.com/owner/repo/pull/123", "review")
+
+    def test_post_comment_uses_issue_comments_api(self):
+        class DummyResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def read(self):
+                return b'{"id": 1}'
+
+        with mock.patch.dict("os.environ", {"GH_TOKEN": "ghs_example"}, clear=True):
+            with mock.patch("urllib.request.urlopen", return_value=DummyResponse()) as urlopen:
+                claude_review.post_pr_comment("https://github.com/owner/repo/pull/123", "review body")
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.github.com/repos/owner/repo/issues/123/comments")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.get_header("Accept"), "application/vnd.github+json")
+        self.assertEqual(request.get_header("Authorization"), "Bearer ghs_example")
+        self.assertEqual(json.loads(request.data.decode("utf-8")), {"body": "review body"})
 
     def test_detects_common_review_hazards(self):
         diff = textwrap.dedent(
@@ -250,9 +282,9 @@ class ClaudeReviewTest(unittest.TestCase):
         self.assertIn("issues: write", contents)
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", contents)
         self.assertIn('python3 agents/pr-reviewer/claude_review.py --pr "$PR_URL" --output review.md', contents)
+        self.assertIn("--post-comment", contents)
         self.assertIn("workflow token can only comment on PRs in this repository", contents)
         self.assertIn("          import re\n          import sys", contents)
-        self.assertIn('gh pr comment "$pr_number" --body-file review.md', contents)
 
         ci_workflow = root / ".github" / "workflows" / "pr-reviewer.yml"
         ci_contents = ci_workflow.read_text(encoding="utf-8")

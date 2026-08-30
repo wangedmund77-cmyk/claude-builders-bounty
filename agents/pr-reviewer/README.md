@@ -9,11 +9,13 @@ confidence score.
 1. Add `agents/pr-reviewer/bin` to your `PATH`.
 2. Run `claude-review --pr https://github.com/owner/repo/pull/123`.
 3. Optionally write the review directly to a file with `--output review.md`.
-4. Paste the generated Markdown into the PR after adding any project-specific test notes.
+4. Optionally post the generated review directly with `--post-comment`.
+5. Add any project-specific test notes before relying on the generated review.
 
 For private repositories or higher GitHub API limits, set `GITHUB_TOKEN` before
 running the CLI. The token is used only as an Authorization header when fetching
-the PR diff from GitHub's REST API.
+the PR diff from GitHub's REST API. `--post-comment` uses `GITHUB_TOKEN` or
+`GH_TOKEN` to call the pull request's issue-comments endpoint.
 
 ## Claude Code Sub-Agent
 
@@ -46,7 +48,7 @@ PR URL, and the workflow will:
 
 1. Generate `review.md` with `agents/pr-reviewer/claude_review.py --pr --output`.
 2. Refuse URLs outside the current repository.
-3. Post the structured review with `gh pr comment --body-file review.md`.
+3. Post the structured review with the CLI's `--post-comment` mode.
 
 ## Sample PR Outputs
 
