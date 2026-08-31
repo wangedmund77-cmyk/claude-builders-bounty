@@ -82,12 +82,19 @@ def pr_to_issue_comments_url(pr_url: str) -> str:
     return f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/comments"
 
 
+def github_token(required: bool = False) -> str:
+    token = os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()
+    if required and not token:
+        raise RuntimeError("--post-comment requires GITHUB_TOKEN or GH_TOKEN")
+    return token
+
+
 def build_diff_request(pr_url: str) -> urllib.request.Request:
     headers = {
         "Accept": "application/vnd.github.v3.diff",
         "User-Agent": "claude-review-agent",
     }
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    token = github_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return urllib.request.Request(pr_to_api_diff_url(pr_url), headers=headers)
@@ -104,19 +111,12 @@ def fetch_pr_diff(pr_url: str) -> str:
         raise RuntimeError(f"could not fetch PR diff: {exc.reason}") from exc
 
 
-def github_token() -> str:
-    token = os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()
-    if not token:
-        raise RuntimeError("--post-comment requires GITHUB_TOKEN or GH_TOKEN")
-    return token
-
-
 def post_pr_comment(pr_url: str, body: str) -> None:
     data = json.dumps({"body": body}).encode("utf-8")
     request = urllib.request.Request(pr_to_issue_comments_url(pr_url), data=data, method="POST")
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", "2022-11-28")
-    request.add_header("Authorization", f"Bearer {github_token()}")
+    request.add_header("Authorization", f"Bearer {github_token(required=True)}")
     request.add_header("Content-Type", "application/json")
     request.add_header("User-Agent", "claude-review-agent")
     try:

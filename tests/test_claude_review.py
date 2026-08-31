@@ -86,6 +86,11 @@ class ClaudeReviewTest(unittest.TestCase):
 
         self.assertEqual(authed_request.get_header("Authorization"), "Bearer ghs_example")
 
+        with mock.patch.dict("os.environ", {"GH_TOKEN": "ghs_fallback"}, clear=True):
+            fallback_request = claude_review.build_diff_request("https://github.com/owner/repo/pull/123")
+
+        self.assertEqual(fallback_request.get_header("Authorization"), "Bearer ghs_fallback")
+
     def test_post_comment_requires_token(self):
         with mock.patch.dict("os.environ", {}, clear=True):
             with self.assertRaisesRegex(RuntimeError, "requires GITHUB_TOKEN or GH_TOKEN"):
