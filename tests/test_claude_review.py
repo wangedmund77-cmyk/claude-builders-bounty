@@ -208,6 +208,35 @@ class ClaudeReviewTest(unittest.TestCase):
         self.assertIn("Only the first 120,000", rendered)
         self.assertIn("Confidence score: Low", rendered)
 
+    def test_detects_privileged_workflow_changes(self):
+        diff = textwrap.dedent(
+            """\
+            diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml
+            index 1111111..2222222 100644
+            --- a/.github/workflows/review.yml
+            +++ b/.github/workflows/review.yml
+            @@ -1,5 +1,10 @@
+             name: Review
+             on:
+            +  pull_request_target:
+            +permissions: write-all
+            +id-token: write
+            +pull-requests: write
+             jobs:
+               review:
+                 runs-on: ubuntu-latest
+            """
+        )
+
+        analysis = claude_review.analyze_diff(diff)
+        risks = "\n".join(analysis.risks)
+        suggestions = "\n".join(analysis.suggestions)
+
+        self.assertIn("Privileged workflow trigger", risks)
+        self.assertIn("Broad workflow permission", risks)
+        self.assertIn("CI workflow changed", risks)
+        self.assertIn("Pin workflow permissions", suggestions)
+
     def test_cli_reads_local_diff_alias(self):
         diff = textwrap.dedent(
             """\

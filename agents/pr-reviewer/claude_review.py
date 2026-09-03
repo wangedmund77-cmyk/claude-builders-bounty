@@ -33,6 +33,18 @@ RISK_PATTERNS = [
     ("Debug output", re.compile(r"\b(?:console\.(?:log|debug)|debugger;)\b")),
     ("Permissive CORS", re.compile(r"Access-Control-Allow-Origin['\"]?\s*[:=]\s*['\"]\*")),
     ("Database mutation", re.compile(r"\b(delete\s+from|update\s+\w+\s+set)\b(?![^;\n]*\bwhere\b)", re.I)),
+    (
+        "Privileged workflow trigger",
+        re.compile(r"^\s*pull_request_target\s*:", re.I),
+    ),
+    (
+        "Broad workflow permission",
+        re.compile(
+            r"^\s*(?:permissions\s*:\s*write-all|"
+            r"(?:contents|actions|checks|deployments|id-token|packages|pull-requests)\s*:\s*write)\s*$",
+            re.I,
+        ),
+    ),
 ]
 MAX_DIFF_CHARS = 120_000
 

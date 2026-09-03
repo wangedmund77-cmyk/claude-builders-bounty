@@ -40,6 +40,14 @@ Reviews analyze the first 120,000 diff characters. If a PR exceeds that cap,
 the output includes a truncation warning and uses a Low confidence score so the
 omitted portion is not silently treated as reviewed.
 
+## Risk Detection
+
+The reviewer flags common diff hazards such as shell execution, destructive
+commands, credential handling, DOM injection, plain HTTP URLs, silent exception
+handlers, debug output, permissive CORS, unscoped database mutation, and risky
+GitHub Actions changes such as `pull_request_target` or broad write
+permissions.
+
 ## Optional GitHub Action Commenter
 
 `.github/workflows/claude-review-comment.yml` can post the generated Markdown
